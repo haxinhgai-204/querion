@@ -1,0 +1,56 @@
+{
+  "title": "Bộ dữ liệu",
+  "description": "Quản lý bộ dữ liệu và tài liệu kiến thức của bạn.",
+  "createDataset": "Tạo bộ dữ liệu",
+  "empty": {
+    "title": "Chưa có bộ dữ liệu nào",
+    "description": "Tạo bộ dữ liệu đầu tiên để bắt đầu."
+  },
+  "modal": {
+    "title": "Tạo bộ dữ liệu mới",
+    "nameLabel": "Tên",
+    "namePlaceholder": "VD: Tài liệu sản phẩm",
+    "descLabel": "Mô tả",
+    "descPlaceholder": "Mô tả tuỳ chọn cho bộ dữ liệu",
+    "cancel": "Huỷ",
+    "create": "Tạo",
+    "creating": "Đang tạo..."
+  },
+  "table": {
+    "name": "Tên",
+    "documents": "Tài liệu",
+    "created": "Ngày tạo",
+    "actions": "Thao tác"
+  },
+  "detail": {
+    "documents": "Tài liệu",
+    "upload": "Tải tệp lên",
+    "noDocuments": "Chưa có tài liệu. Tải tệp lên để bắt đầu.",
+    "filename": "Tên tệp",
+    "size": "Kích thước",
+    "status": "Trạng thái",
+    "uploadedAt": "Ngày tải",
+    "actions": "Thao tác",
+    "deleteConfirm": "Bạn có chắc muốn xoá tài liệu này?",
+    "index": "Lập chỉ mục"
+  },
+  "chunks": {
+    "title": "Xem trước Chunks",
+    "empty": "Không tìm thấy chunks",
+    "prev": "Trước",
+    "next": "Tiếp"
+  },
+  "upload": {
+    "title": "Kéo thả tệp hoặc nhấp để tải lên",
+    "subtitle": "Hỗ trợ PDF, DOCX, TXT (tối đa 50MB)",
+    "uploading": "Đang tải lên..."
+  },
+  "status": {
+    "uploaded": "Đã tải",
+    "indexing": "Đang xử lý",
+    "ready": "Sẵn sàng",
+    "failed": "Lỗi"
+  },
+  "deleteConfirm": "Bạn có chắc muốn xoá bộ dữ liệu này?",
+  "deleted": "Đã xoá bộ dữ liệu"
+}

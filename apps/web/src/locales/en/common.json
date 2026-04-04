@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "datasets": "Datasets",
+    "workflows": "Workflows",
+    "apps": "Apps",
+    "chat": "Chat"
+  },
+  "topbar": {
+    "defaultWorkspace": "Default Workspace"
+  },
+  "buttons": {
+    "create": "Create",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "send": "Send",
+    "upload": "Upload"
+  },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light",
+    "system": "System"
+  },
+  "language": {
+    "en": "English",
+    "vi": "Tiếng Việt"
+  },
+  "appName": "Querion",
+  "version": "v0.1.0"
+}

@@ -1,0 +1,30 @@
+{
+  "nav": {
+    "datasets": "Bộ dữ liệu",
+    "workflows": "Quy trình",
+    "apps": "Ứng dụng",
+    "chat": "Trò chuyện"
+  },
+  "topbar": {
+    "defaultWorkspace": "Không gian mặc định"
+  },
+  "buttons": {
+    "create": "Tạo mới",
+    "save": "Lưu",
+    "cancel": "Hủy",
+    "delete": "Xóa",
+    "send": "Gửi",
+    "upload": "Tải lên"
+  },
+  "theme": {
+    "dark": "Tối",
+    "light": "Sáng",
+    "system": "Hệ thống"
+  },
+  "language": {
+    "en": "English",
+    "vi": "Tiếng Việt"
+  },
+  "appName": "Querion",
+  "version": "v0.1.0"
+}

@@ -1,0 +1,9 @@
+{
+  "title": "Apps",
+  "description": "Configure and deploy your AI-powered applications.",
+  "createApp": "New App",
+  "empty": {
+    "title": "No apps yet",
+    "description": "Create an app to bind a workflow and start chatting."
+  }
+}

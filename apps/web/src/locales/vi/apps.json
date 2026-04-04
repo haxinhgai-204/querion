@@ -1,0 +1,9 @@
+{
+  "title": "Ứng dụng",
+  "description": "Cấu hình và triển khai các ứng dụng AI của bạn.",
+  "createApp": "Ứng dụng mới",
+  "empty": {
+    "title": "Chưa có ứng dụng nào",
+    "description": "Tạo ứng dụng để gắn quy trình và bắt đầu trò chuyện."
+  }
+}

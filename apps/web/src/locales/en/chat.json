@@ -1,0 +1,7 @@
+{
+  "title": "Chat",
+  "description": "Ask questions and get answers with citations from your datasets.",
+  "startConversation": "Start a conversation",
+  "selectApp": "Select an app and ask a question to begin.",
+  "inputPlaceholder": "Type your message..."
+}

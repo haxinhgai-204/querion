@@ -1,0 +1,56 @@
+{
+  "title": "Datasets",
+  "description": "Manage your knowledge base datasets and documents.",
+  "createDataset": "Create Dataset",
+  "empty": {
+    "title": "No datasets yet",
+    "description": "Create your first dataset to get started."
+  },
+  "modal": {
+    "title": "Create New Dataset",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Product Documentation",
+    "descLabel": "Description",
+    "descPlaceholder": "Optional description for this dataset",
+    "cancel": "Cancel",
+    "create": "Create",
+    "creating": "Creating..."
+  },
+  "table": {
+    "name": "Name",
+    "documents": "Documents",
+    "created": "Created",
+    "actions": "Actions"
+  },
+  "detail": {
+    "documents": "Documents",
+    "upload": "Upload Files",
+    "noDocuments": "No documents yet. Upload files to get started.",
+    "filename": "Filename",
+    "size": "Size",
+    "status": "Status",
+    "uploadedAt": "Uploaded",
+    "actions": "Actions",
+    "deleteConfirm": "Are you sure you want to delete this document?",
+    "index": "Index"
+  },
+  "chunks": {
+    "title": "Chunks Preview",
+    "empty": "No chunks found",
+    "prev": "Previous",
+    "next": "Next"
+  },
+  "upload": {
+    "title": "Drop files here or click to upload",
+    "subtitle": "Supports PDF, DOCX, TXT (max 50MB)",
+    "uploading": "Uploading..."
+  },
+  "status": {
+    "uploaded": "Uploaded",
+    "indexing": "Indexing",
+    "ready": "Ready",
+    "failed": "Failed"
+  },
+  "deleteConfirm": "Are you sure you want to delete this dataset?",
+  "deleted": "Dataset deleted"
+}
