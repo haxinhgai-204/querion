@@ -178,6 +178,7 @@ export default function StudentChatPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({ detail: "Something went wrong" }));
+        console.error("Chat API error response:", res.status, err);
         setMessages((prev) => {
           const u = [...prev]; u[u.length - 1] = { role: "assistant", content: `⚠️ ${err.detail}` }; return u;
         });
@@ -225,7 +226,9 @@ export default function StudentChatPage() {
         });
       }
       if (selectedApp) loadConversations(selectedApp.id);
-    } catch {
+    } catch (err) {
+      console.error("Fetch request failed:", err);
+      console.error("URL checked:", `${API_BASE}/v1/student/apps/${selectedApp.id}/chat`);
       setMessages((prev) => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: t("connectionError") }; return u; });
     }
     setSending(false);
