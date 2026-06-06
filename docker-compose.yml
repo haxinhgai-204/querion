@@ -13,7 +13,7 @@ services:
       # Đường dẫn đã được sửa để phù hợp khi compose file nằm ở thư mục gốc
       - ./infra/docker/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-querion}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-querion}" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,7 +25,7 @@ services:
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -39,7 +39,7 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      test: [ "CMD", "mc", "ready", "local" ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -51,11 +51,7 @@ services:
       minio:
         condition: service_healthy
     entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin_secret};
-      mc mb --ignore-existing local/$${MINIO_BUCKET:-querion-docs};
-      echo 'Bucket created successfully';
-      "
+      /bin/sh -c " mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin_secret}; mc mb --ignore-existing local/$${MINIO_BUCKET:-querion-docs}; echo 'Bucket created successfully'; "
     env_file: .env.production
 
   api:
@@ -135,6 +131,7 @@ services:
     restart: unless-stopped
     environment:
       - DEFAULT_EMAIL=${SSL_EMAIL}
+      - NGINX_PROXY_CONTAINER=nginx-proxy
     volumes:
       - certs:/etc/nginx/certs
       - vhost:/etc/nginx/vhost.d
