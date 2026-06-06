@@ -52,5 +52,11 @@
     "failed": "Lỗi"
   },
   "deleteConfirm": "Bạn có chắc muốn xoá bộ dữ liệu này?",
+  "deleteConfirmTitle": "Xoá bộ dữ liệu",
+  "deleteWarnTitle": "⚠️ Bộ dữ liệu đang được sử dụng",
+  "deleteWarnDocuments": "Bộ dữ liệu này chứa {count} tài liệu.",
+  "deleteWarnApps": "Bộ dữ liệu đang được sử dụng bởi app: {apps}.",
+  "deleteWarnConfirm": "Bạn có chắc chắn muốn xoá không? Hành động này không thể hoàn tác.",
+  "deleteConfirmBtn": "Xác nhận xoá",
   "deleted": "Đã xoá bộ dữ liệu"
 }

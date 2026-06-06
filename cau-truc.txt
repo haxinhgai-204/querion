@@ -1,0 +1,271 @@
+.
+├── apps
+│   ├── api
+│   │   ├── alembic
+│   │   │   ├── versions
+│   │   │   │   ├── 0001_create_workspaces.py
+│   │   │   │   ├── 0002_users_and_memberships.py
+│   │   │   │   ├── 0003_datasets_and_documents.py
+│   │   │   │   ├── 0004_ai_providers_chunks_embeddings.py
+│   │   │   │   ├── 0005_conversations_messages.py
+│   │   │   │   ├── 0006_workflows.py
+│   │   │   │   ├── 0007_workflow_type.py
+│   │   │   │   ├── 0008_apps_runs.py
+│   │   │   │   ├── 0009_students_publish.py
+│   │   │   │   ├── 0010_app_dataset.py
+│   │   │   │   ├── 0011_conversation_student.py
+│   │   │   │   ├── 0012_conv_dataset_nullable.py
+│   │   │   │   └── 0013_aiprovider_purpose.py
+│   │   │   ├── env.py
+│   │   │   └── script.py.mako
+│   │   ├── app
+│   │   │   ├── auth
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── deps.py
+│   │   │   │   └── security.py
+│   │   │   ├── models
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── ai_provider.py
+│   │   │   │   ├── app.py
+│   │   │   │   ├── chunk.py
+│   │   │   │   ├── conversation.py
+│   │   │   │   ├── dataset.py
+│   │   │   │   ├── document.py
+│   │   │   │   ├── embedding.py
+│   │   │   │   ├── message.py
+│   │   │   │   ├── model_registry.py
+│   │   │   │   ├── run.py
+│   │   │   │   ├── student.py
+│   │   │   │   ├── user.py
+│   │   │   │   ├── user_workspace.py
+│   │   │   │   ├── workflow.py
+│   │   │   │   └── workspace.py
+│   │   │   ├── routers
+│   │   │   │   ├── __init__.py
+│   │   │   │   ├── apps.py
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── chat.py
+│   │   │   │   ├── datasets.py
+│   │   │   │   ├── documents.py
+│   │   │   │   ├── health.py
+│   │   │   │   ├── members.py
+│   │   │   │   ├── providers.py
+│   │   │   │   ├── retrieval.py
+│   │   │   │   ├── student_auth.py
+│   │   │   │   ├── students.py
+│   │   │   │   ├── users.py
+│   │   │   │   ├── workflows.py
+│   │   │   │   └── workspaces.py
+│   │   │   ├── schemas
+│   │   │   │   ├── __init__.py
+│   │   │   │   └── datasets.py
+│   │   │   ├── services
+│   │   │   │   ├── chat.py
+│   │   │   │   ├── encryption.py
+│   │   │   │   ├── observability.py
+│   │   │   │   ├── retrieval.py
+│   │   │   │   ├── workflow_runtime.py
+│   │   │   │   └── workflow_validator.py
+│   │   │   ├── __init__.py
+│   │   │   ├── config.py
+│   │   │   ├── db.py
+│   │   │   ├── deps.py
+│   │   │   ├── main.py
+│   │   │   ├── seed.py
+│   │   │   └── storage.py
+│   │   ├── querion_api.egg-info
+│   │   │   ├── dependency_links.txt
+│   │   │   ├── PKG-INFO
+│   │   │   ├── requires.txt
+│   │   │   ├── SOURCES.txt
+│   │   │   └── top_level.txt
+│   │   ├── .env
+│   │   ├── alembic.ini
+│   │   ├── Dockerfile
+│   │   ├── migration_error.log
+│   │   ├── pyproject.toml
+│   │   ├── sample_students.csv
+│   │   └── test_rq.py
+│   ├── web
+│   │   ├── public
+│   │   │   ├── apple-icon.png
+│   │   │   ├── file.svg
+│   │   │   ├── globe.svg
+│   │   │   ├── icon-192.png
+│   │   │   ├── icon-512.png
+│   │   │   ├── icon.png
+│   │   │   ├── logo.png
+│   │   │   ├── next.svg
+│   │   │   ├── vercel.svg
+│   │   │   └── window.svg
+│   │   ├── src
+│   │   │   ├── app
+│   │   │   │   ├── admin
+│   │   │   │   │   ├── settings
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── students
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── users
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── workspaces
+│   │   │   │   │       └── page.tsx
+│   │   │   │   ├── apps
+│   │   │   │   │   ├── [appId]
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── chat
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── datasets
+│   │   │   │   │   ├── [datasetId]
+│   │   │   │   │   │   ├── chat
+│   │   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── login
+│   │   │   │   │   ├── layout.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── student
+│   │   │   │   │   ├── change-password
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── chat
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   ├── login
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── layout.tsx
+│   │   │   │   ├── workflows
+│   │   │   │   │   ├── [workflowId]
+│   │   │   │   │   │   └── page.tsx
+│   │   │   │   │   └── page.tsx
+│   │   │   │   ├── globals.css
+│   │   │   │   ├── icon.png
+│   │   │   │   ├── layout.tsx
+│   │   │   │   └── page.tsx
+│   │   │   ├── components
+│   │   │   │   ├── datasets
+│   │   │   │   │   ├── ChunksPreviewModal.tsx
+│   │   │   │   │   ├── CreateDatasetModal.tsx
+│   │   │   │   │   └── UploadDropzone.tsx
+│   │   │   │   ├── layout
+│   │   │   │   │   ├── AppShell.tsx
+│   │   │   │   │   ├── Sidebar.tsx
+│   │   │   │   │   └── Topbar.tsx
+│   │   │   │   ├── providers
+│   │   │   │   │   ├── AuthProvider.tsx
+│   │   │   │   │   ├── I18nProvider.tsx
+│   │   │   │   │   ├── StudentSettingsProvider.tsx
+│   │   │   │   │   └── ThemeProvider.tsx
+│   │   │   │   ├── ui
+│   │   │   │   │   ├── ConfirmDialog.tsx
+│   │   │   │   │   ├── LanguageSwitcher.tsx
+│   │   │   │   │   ├── PermissionGate.tsx
+│   │   │   │   │   ├── ThemeToggle.tsx
+│   │   │   │   │   └── WorkspaceSwitcher.tsx
+│   │   │   │   └── workspace
+│   │   │   │       └── MembersPanel.tsx
+│   │   │   ├── lib
+│   │   │   │   ├── api
+│   │   │   │   │   ├── apps.ts
+│   │   │   │   │   ├── chat.ts
+│   │   │   │   │   ├── datasets.ts
+│   │   │   │   │   ├── student.ts
+│   │   │   │   │   └── workflows.ts
+│   │   │   │   ├── i18n
+│   │   │   │   │   └── student.ts
+│   │   │   │   └── api.ts
+│   │   │   └── locales
+│   │   │       ├── en
+│   │   │       │   ├── apps.json
+│   │   │       │   ├── chat.json
+│   │   │       │   ├── common.json
+│   │   │       │   ├── datasets.json
+│   │   │       │   └── workflows.json
+│   │   │       └── vi
+│   │   │           ├── apps.json
+│   │   │           ├── chat.json
+│   │   │           ├── common.json
+│   │   │           ├── datasets.json
+│   │   │           └── workflows.json
+│   │   ├── .env.local
+│   │   ├── .gitignore
+│   │   ├── Dockerfile
+│   │   ├── eslint.config.mjs
+│   │   ├── next-env.d.ts
+│   │   ├── next.config.ts
+│   │   ├── package-lock.json
+│   │   ├── package.json
+│   │   ├── postcss.config.mjs
+│   │   ├── README.md
+│   │   └── tsconfig.json
+│   └── worker
+│       ├── scripts
+│       │   └── start.sh
+│       ├── worker
+│       │   ├── pipeline
+│       │   │   ├── __init__.py
+│       │   │   ├── chunker.py
+│       │   │   ├── downloader.py
+│       │   │   ├── embedder.py
+│       │   │   └── parser.py
+│       │   ├── tasks
+│       │   │   ├── __init__.py
+│       │   │   └── index_document.py
+│       │   ├── __init__.py
+│       │   ├── callbacks.py
+│       │   ├── config.py
+│       │   ├── db.py
+│       │   └── main.py
+│       ├── .env
+│       ├── requirements.txt
+│       ├── worker.log
+│       └── worker_stderr.log
+├── docs
+│   ├── plan
+│   │   ├── PHASE_0_TASKS.md
+│   │   ├── PHASE_1_TASKS.md
+│   │   ├── PHASE_2_TASKS.md
+│   │   ├── PHASE_3_TASKS.md
+│   │   ├── PHASE_4_TASKS.md
+│   │   ├── PHASE_5_TASKS.md
+│   │   └── PLAN.md
+│   ├── starter
+│   │   ├── AGENT_KICKOFF.md
+│   │   ├── API_CONTRACT.md
+│   │   ├── ARCHITECTURE.md
+│   │   ├── DATASET_INDEXING_SPEC.md
+│   │   ├── DB_SCHEMA.md
+│   │   ├── FRONTEND_SPEC.md
+│   │   ├── OBSERVABILITY_SPEC.md
+│   │   ├── README.md
+│   │   ├── REFERENCES.md
+│   │   ├── REPO_STRUCTURE.md
+│   │   ├── SECURITY_AND_TENANCY.md
+│   │   ├── STUDENT_AND_PUBLISHING.md
+│   │   ├── TECH_PLAN.md
+│   │   └── WORKFLOW_SPEC.md
+│   ├── BAO_CAO_TOT_NGHIEP.md
+│   ├── DAC_TA_CHUC_NANG.md
+│   ├── SETUP_WINDOWS.md
+│   └── START_STOP_GUIDE.md
+├── infra
+│   └── docker
+│       ├── .env
+│       ├── .env.example
+│       ├── docker-compose.yml
+│       └── init-db.sql
+├── scratch
+│   ├── create_detailed_spec.py
+│   ├── create_spec.py
+│   ├── Querion_Detailed_Functional_Spec.docx
+│   ├── Querion_Specification.docx
+│   └── scan.py
+├── .env
+├── .env.example
+├── .gitignore
+├── CLAUDE.md
+├── DAC_TA_CHUC_NANG.md
+├── features-scan.txt
+├── README.md
+├── start.bat
+├── start.ps1
+├── stop.bat
+└── stop.ps1

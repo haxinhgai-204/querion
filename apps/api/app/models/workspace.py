@@ -22,7 +22,11 @@ class Workspace(Base):
     )
 
     # Relationships
-    members = relationship("UserWorkspace", back_populates="workspace", lazy="selectin")
+    members = relationship("UserWorkspace", back_populates="workspace", lazy="selectin", cascade="all, delete-orphan")
+    datasets = relationship("Dataset", cascade="all, delete-orphan")
+    apps = relationship("App", cascade="all, delete-orphan")
+    workflows = relationship("Workflow", cascade="all, delete-orphan")
+    conversations = relationship("Conversation", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Workspace id={self.id} name={self.name!r}>"

@@ -5,6 +5,8 @@ import { useI18n } from "@/components/providers/I18nProvider";
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+
 interface UserItem {
   id: string;
   email: string;
@@ -22,6 +24,7 @@ export default function AdminUsersPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", name: "" });
   const [error, setError] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   const fetchUsers = async () => {
     try {
@@ -51,6 +54,18 @@ export default function AdminUsersPage() {
   const toggleActive = async (userId: string, isActive: boolean) => {
     await api.patch(`/v1/users/${userId}`, { is_active: !isActive });
     fetchUsers();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api.delete(`/v1/users/${deleteTarget}`);
+      setDeleteTarget(null);
+      fetchUsers();
+    } catch (err: any) {
+      alert(err.message || "Failed to delete user");
+      setDeleteTarget(null);
+    }
   };
 
   if (!isSuper) {
@@ -158,13 +173,25 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-4 py-3 text-right">
                   {u.role !== "super_admin" && (
-                    <button
-                      onClick={() => toggleActive(u.id, u.is_active)}
-                      className="text-xs px-2 py-1 rounded"
-                      style={{ color: "var(--muted)", border: "1px solid var(--border)" }}
-                    >
-                      {u.is_active ? "Deactivate" : "Activate"}
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => toggleActive(u.id, u.is_active)}
+                        className="text-xs px-2 py-1 rounded transition-colors"
+                        style={{
+                          color: u.is_active ? "#ef4444" : "#22c55e",
+                          border: `1px solid ${u.is_active ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)"}`
+                        }}
+                      >
+                        {u.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(u.id)}
+                        className="text-xs px-2 py-1 rounded"
+                        style={{ color: "#ef4444", border: "1px solid rgba(239,68,68,0.2)" }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -174,6 +201,14 @@ export default function AdminUsersPage() {
         {loading && <p className="p-4 text-sm" style={{ color: "var(--muted)" }}>Loading...</p>}
         {!loading && users.length === 0 && <p className="p-4 text-sm" style={{ color: "var(--muted)" }}>No users found</p>}
       </div>
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        message="Are you sure you want to permanently delete this user?"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

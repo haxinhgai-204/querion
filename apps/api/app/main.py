@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.deps import close_redis
-from app.routers import health, auth, users, workspaces, members, datasets, documents, providers, retrieval, chat, workflows, apps, student_auth, students
+from app.routers import health, auth, users, workspaces, members, datasets, documents, providers, retrieval, chat, workflows, apps, student_auth, students, survey
 from app.seed import seed_super_admin
 
 
@@ -49,3 +49,4 @@ app.include_router(workflows.router)
 app.include_router(apps.router)
 app.include_router(student_auth.router)
 app.include_router(students.router)
+app.include_router(survey.router)

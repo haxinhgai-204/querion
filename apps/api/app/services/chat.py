@@ -1,6 +1,8 @@
 """Chat service — retrieval + LLM streaming for RAG chat."""
 
 import json
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 from uuid import UUID
 from typing import AsyncGenerator
 
@@ -20,11 +22,12 @@ Personality:
 - Use a friendly tone, add brief commentary or insights when helpful.
 
 How to answer:
-- For greetings or casual chat, respond naturally. You can mention you're ready to help with their documents.
-- For document-related questions, answer thoroughly using the context below. Cite sources with [#0], [#1] etc.
-- If you can partially answer, do your best and note what's missing.
-- If the context doesn't cover the question, say so honestly and suggest related topics the documents DO cover.
-- Feel free to summarize, compare, or offer insights that connect different parts of the context.
+- For greetings or casual chat (e.g., "xin chào", "hello", "tạm biệt"), respond naturally and friendly.
+- For questions seeking specific information, facts, or knowledge:
+  1. You MUST answer using ONLY the "Document Context" provided below.
+  2. If the "Document Context" is empty ("No relevant context found.") or does not contain the information needed to answer the question, you MUST apologize politely and state that you cannot find this information in the documents.
+  3. Under NO circumstances should you use your own pre-trained external knowledge to answer factual questions that are not covered in the "Document Context".
+- Cite sources with [#0], [#1] etc. when answering from the context.
 - Always respond in the same language the user uses.
 
 Document Context:
@@ -87,7 +90,10 @@ async def chat_stream(
     api_key = decrypt_key(provider.api_key_encrypted)
 
     try:
-        if provider.provider_name == "google":
+        if provider.provider_name == "openrouter":
+            async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=OPENROUTER_BASE_URL):
+                yield chunk
+        elif provider.provider_name == "google":
             async for chunk in _stream_google(api_key, provider.model_name, messages):
                 yield chunk
         elif provider.provider_name == "anthropic":
@@ -102,10 +108,15 @@ async def chat_stream(
     yield "data: [DONE]\n\n"
 
 
-async def _stream_openai(api_key: str, model: str, messages: list[dict]) -> AsyncGenerator[str, None]:
-    """Stream from OpenAI API using async client."""
+async def _stream_openai(
+    api_key: str, model: str, messages: list[dict], *, base_url: str | None = None,
+) -> AsyncGenerator[str, None]:
+    """Stream from OpenAI-compatible API (also used for OpenRouter)."""
     import openai
-    client = openai.AsyncOpenAI(api_key=api_key)
+    kwargs = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    client = openai.AsyncOpenAI(**kwargs)
 
     stream = await client.chat.completions.create(
         model=model,
@@ -204,7 +215,15 @@ async def generate_title(db: AsyncSession, user_message: str, assistant_response
 User message: {user_message[:300]}"""
 
     try:
-        if provider.provider_name == "google":
+        if provider.provider_name == "openrouter":
+            import openai
+            client = openai.AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)
+            result = await client.chat.completions.create(
+                model=provider.model_name, max_tokens=50,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            return result.choices[0].message.content.strip()[:120] if result.choices else None
+        elif provider.provider_name == "google":
             from google import genai
             client = genai.Client(api_key=api_key)
             model = provider.model_name if provider.model_name.startswith("models/") else f"models/{provider.model_name}"

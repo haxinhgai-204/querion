@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useRouter } from "next/navigation";
 import {
   restoreStudentToken, studentMe, studentLogout, studentRefresh,
@@ -9,10 +11,67 @@ import {
 import { useStudentSettings, getThemeVars } from "@/components/providers/StudentSettingsProvider";
 
 interface Conversation { id: string; app_id: string; title: string; message_count: number; }
-interface ChatMessage { role: string; content: string; }
+interface Source { content: string; filename?: string; score?: number; chunk_index?: number; }
+interface ChatMessage { role: string; content: string; sources?: Source[]; }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const getToken = () => localStorage.getItem("querion-student-token");
+
+// ---- Source Citations Component ----
+function SourceCitations({ sources, vars }: { sources: Source[]; vars: Record<string, string> }) {
+  const [open, setOpen] = useState(false);
+
+  // Only show sources with score >= 0.5, deduplicated by filename
+  const relevant = sources
+    .filter((s) => s.score === undefined || s.score >= 0.5)
+    .reduce<Source[]>((acc, src) => {
+      const name = src.filename || "Tài liệu";
+      if (!acc.find((a) => (a.filename || "Tài liệu") === name)) acc.push(src);
+      return acc;
+    }, []);
+
+  if (!relevant.length) return null;
+
+  return (
+    <div className="mt-1 max-w-[70%]" style={{ fontSize: 11 }}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all"
+        style={{ background: vars["--s-accent-light"], color: vars["--s-accent-text"] }}
+      >
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+          <path d="M4 6h8M4 10h5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" />
+        </svg>
+        <span className="font-medium">{relevant.length} nguồn tài liệu</span>
+        <svg
+          width="10" height="10" viewBox="0 0 10 10" fill="none"
+          style={{ transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.2s" }}
+        >
+          <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="mt-1.5 space-y-1" style={{ maxWidth: 420 }}>
+          {relevant.map((src, idx) => (
+            <div key={idx} className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5"
+              style={{ background: vars["--s-bg-tertiary"] || vars["--s-bg-secondary"], border: `1px solid ${vars["--s-border"]}` }}>
+              <span className="font-medium truncate" style={{ color: vars["--s-accent-text"] }}>
+                [{idx + 1}] {src.filename || "Tài liệu"}
+              </span>
+              {src.score !== undefined && (
+                <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-mono"
+                  style={{ background: vars["--s-accent-light"], color: vars["--s-text-muted"] }}>
+                  {(src.score * 100).toFixed(0)}%
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function StudentChatPage() {
   const router = useRouter();
@@ -69,7 +128,11 @@ export default function StudentChatPage() {
       });
       if (res.ok) {
         const msgs = await res.json();
-        setMessages(msgs.map((m: any) => ({ role: m.role, content: m.content })));
+        setMessages(msgs.map((m: any) => ({
+          role: m.role,
+          content: m.content,
+          sources: m.sources || undefined,
+        })));
       }
     } catch { /* silent */ }
   }, []);
@@ -125,6 +188,7 @@ export default function StudentChatPage() {
       const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let accumulated = "";
+      let pendingSources: Source[] = [];
 
       while (reader) {
         const { done, value } = await reader.read();
@@ -137,7 +201,9 @@ export default function StudentChatPage() {
             if (data.type === "token") {
               accumulated += data.content;
               const tt = accumulated;
-              setMessages((prev) => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: tt }; return u; });
+              setMessages((prev) => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: tt, sources: pendingSources.length ? pendingSources : undefined }; return u; });
+            } else if (data.type === "sources") {
+              pendingSources = data.sources || [];
             } else if (data.type === "conversation_id" && !activeConvId) {
               setActiveConvId(data.conversation_id);
             } else if (data.type === "title") {
@@ -304,15 +370,63 @@ export default function StudentChatPage() {
                 </div>
               )}
               {messages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                  <div className="rounded-xl px-4 py-2.5 max-w-[70%] text-sm whitespace-pre-wrap"
+                <div key={i} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                  <div
+                    className={`rounded-xl px-4 py-2.5 max-w-[72%] text-sm ${msg.role === "assistant" ? "chat-md-bubble" : ""}`}
                     style={{
                       background: msg.role === "user" ? vars["--s-user-bubble"] : vars["--s-bot-bubble"],
                       color: msg.role === "user" ? vars["--s-user-text"] : vars["--s-bot-text"],
                       transition: "background 0.3s, color 0.3s",
-                    }}>
-                    {msg.content}
+                      whiteSpace: msg.role === "user" ? "pre-wrap" : undefined,
+                    }}
+                  >
+                    {msg.role === "user" ? (
+                      msg.content
+                    ) : (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          p: ({ children }) => <p style={{ margin: "0.35em 0" }}>{children}</p>,
+                          ul: ({ children }) => <ul style={{ paddingLeft: "1.25em", margin: "0.35em 0", listStyleType: "disc" }}>{children}</ul>,
+                          ol: ({ children }) => <ol style={{ paddingLeft: "1.25em", margin: "0.35em 0", listStyleType: "decimal" }}>{children}</ol>,
+                          li: ({ children }) => <li style={{ margin: "0.15em 0" }}>{children}</li>,
+                          strong: ({ children }) => <strong style={{ fontWeight: 700 }}>{children}</strong>,
+                          em: ({ children }) => <em style={{ fontStyle: "italic" }}>{children}</em>,
+                          h1: ({ children }) => <h1 style={{ fontSize: "1.2em", fontWeight: 700, margin: "0.6em 0 0.3em" }}>{children}</h1>,
+                          h2: ({ children }) => <h2 style={{ fontSize: "1.1em", fontWeight: 700, margin: "0.5em 0 0.25em" }}>{children}</h2>,
+                          h3: ({ children }) => <h3 style={{ fontSize: "1em", fontWeight: 700, margin: "0.4em 0 0.2em" }}>{children}</h3>,
+                          code: ({ inline, children }: any) =>
+                            inline ? (
+                              <code style={{ background: vars["--s-bg-tertiary"] || "rgba(0,0,0,0.12)", borderRadius: 4, padding: "1px 5px", fontFamily: "monospace", fontSize: "0.88em" }}>{children}</code>
+                            ) : (
+                              <pre style={{ background: vars["--s-bg-tertiary"] || "rgba(0,0,0,0.12)", borderRadius: 8, padding: "10px 12px", overflowX: "auto", margin: "0.4em 0" }}>
+                                <code style={{ fontFamily: "monospace", fontSize: "0.85em" }}>{children}</code>
+                              </pre>
+                            ),
+                          blockquote: ({ children }) => (
+                            <blockquote style={{ borderLeft: `3px solid ${vars["--s-accent"]}`, paddingLeft: "0.75em", margin: "0.4em 0", opacity: 0.8 }}>{children}</blockquote>
+                          ),
+                          hr: () => <hr style={{ border: "none", borderTop: `1px solid ${vars["--s-border"]}`, margin: "0.6em 0" }} />,
+                          a: ({ href, children }) => (
+                            <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: vars["--s-accent"], textDecoration: "underline" }}>{children}</a>
+                          ),
+                          table: ({ children }) => (
+                            <div style={{ overflowX: "auto", margin: "0.5em 0" }}>
+                              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: "0.9em" }}>{children}</table>
+                            </div>
+                          ),
+                          th: ({ children }) => <th style={{ border: `1px solid ${vars["--s-border"]}`, padding: "5px 10px", background: vars["--s-bg-tertiary"], fontWeight: 600, textAlign: "left" }}>{children}</th>,
+                          td: ({ children }) => <td style={{ border: `1px solid ${vars["--s-border"]}`, padding: "5px 10px" }}>{children}</td>,
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
                   </div>
+                  {/* Source citations — only for assistant messages with sources */}
+                  {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
+                    <SourceCitations sources={msg.sources} vars={vars} />
+                  )}
                 </div>
               ))}
               {sending && messages[messages.length - 1]?.content === "" && (

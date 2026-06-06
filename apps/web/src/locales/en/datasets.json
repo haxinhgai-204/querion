@@ -52,5 +52,11 @@
     "failed": "Failed"
   },
   "deleteConfirm": "Are you sure you want to delete this dataset?",
+  "deleteConfirmTitle": "Delete Dataset",
+  "deleteWarnTitle": "⚠️ Dataset In Use",
+  "deleteWarnDocuments": "This dataset contains {count} document(s).",
+  "deleteWarnApps": "It is currently used by: {apps}.",
+  "deleteWarnConfirm": "Are you sure you want to delete it? This action cannot be undone.",
+  "deleteConfirmBtn": "Confirm Delete",
   "deleted": "Dataset deleted"
 }

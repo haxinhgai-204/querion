@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { api } from "@/lib/api";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
 interface StudentItem {
   id: string;
@@ -25,6 +26,7 @@ export default function AdminStudentsPage() {
   const [creating, setCreating] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
@@ -49,25 +51,39 @@ export default function AdminStudentsPage() {
     finally { setCreating(false); }
   };
 
-  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setImporting(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const result = await api.upload<{ created: number; skipped: number; errors: string[] }>("/v1/students/import-csv", formData);
+      const result = await api.upload<{ created: number; skipped: number; errors: string[] }>("/v1/students/import", formData);
       setImportResult(result);
       fetchStudents();
-    } catch { /* silent */ }
+    } catch (err: any) {
+      alert(err.message || "Failed to import file");
+    }
     finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
-  const handleDeactivate = async (id: string) => {
+  const toggleActive = async (id: string, currentStatus: boolean) => {
     try {
-      await api.delete(`/v1/students/${id}`);
-      setStudents((prev) => prev.map((s) => s.id === id ? { ...s, is_active: false } : s));
+      await api.patch(`/v1/students/${id}`, { is_active: !currentStatus });
+      setStudents((prev) => prev.map((s) => s.id === id ? { ...s, is_active: !currentStatus } : s));
     } catch { /* silent */ }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await api.delete(`/v1/students/${deleteTarget}`);
+      setStudents((prev) => prev.filter((s) => s.id !== deleteTarget));
+      setDeleteTarget(null);
+    } catch (err: any) {
+      alert(err.message || "Failed to delete student");
+      setDeleteTarget(null);
+    }
   };
 
   if (!isAdmin) return <div className="text-center py-20 text-sm" style={{ color: "var(--muted)" }}>Access denied</div>;
@@ -80,12 +96,12 @@ export default function AdminStudentsPage() {
           <p className="text-sm mt-0.5" style={{ color: "var(--muted)" }}>Manage student accounts (default password: querion123)</p>
         </div>
         <div className="flex gap-2">
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.docx" className="hidden" onChange={handleImport} />
           <button onClick={() => fileRef.current?.click()} disabled={importing}
             className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium"
             style={{ background: "var(--card)", color: "var(--foreground)", border: "1px solid var(--border)" }}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 6L7 10L11 6" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            {importing ? "Importing..." : "Import CSV"}
+            {importing ? "Importing..." : "Import File"}
           </button>
           <button onClick={() => setShowAdd(true)}
             className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium"
@@ -117,7 +133,7 @@ export default function AdminStudentsPage() {
       ) : students.length === 0 ? (
         <div className="text-center py-20">
           <h3 className="text-lg font-semibold mb-1" style={{ color: "var(--foreground)" }}>No students yet</h3>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Create students or import from CSV</p>
+          <p className="text-sm" style={{ color: "var(--muted)" }}>Create students or import from CSV, Excel, or Word</p>
         </div>
       ) : (
         <div className="rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)" }}>
@@ -146,11 +162,42 @@ export default function AdminStudentsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-2.5">
-                    {s.is_active && (
-                      <button onClick={() => handleDeactivate(s.id)} className="text-xs font-medium" style={{ color: "#ef4444" }}>
-                        Deactivate
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleActive(s.id, s.is_active)}
+                        className="text-[11px] px-2 py-1 rounded font-medium transition-colors"
+                        style={{
+                          color: s.is_active ? "#ef4444" : "#22c55e",
+                          border: `1px solid ${s.is_active ? "rgba(239,68,68,0.2)" : "rgba(34,197,94,0.2)"}`,
+                          background: "transparent"
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = s.is_active ? "rgba(239,68,68,0.05)" : "rgba(34,197,94,0.05)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        {s.is_active ? "Deactivate" : "Activate"}
                       </button>
-                    )}
+                      <button
+                        onClick={() => setDeleteTarget(s.id)}
+                        className="text-[11px] px-2 py-1 rounded font-medium transition-colors"
+                        style={{
+                          color: "#ef4444",
+                          border: "1px solid rgba(239,68,68,0.2)",
+                          background: "transparent"
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "rgba(239,68,68,0.05)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -196,6 +243,14 @@ export default function AdminStudentsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!deleteTarget}
+        message="Are you sure you want to permanently delete this student?"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

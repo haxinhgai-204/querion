@@ -74,3 +74,20 @@ export function deleteWorkflow(id: string) {
 export function runWorkflow(id: string, query: string, inputs?: Record<string, any>) {
   return api.post<RunResult>(`/v1/workflows/${id}/run`, { query, inputs });
 }
+
+export interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+  type: string;
+  icon: string;
+  tags: string[];
+}
+
+export function listWorkflowTemplates() {
+  return api.get<WorkflowTemplate[]>("/v1/workflows/templates");
+}
+
+export function createWorkflowFromTemplate(templateId: string) {
+  return api.post<WorkflowResponse>(`/v1/workflows/from-template/${templateId}`, {});
+}

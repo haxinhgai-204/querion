@@ -341,6 +341,27 @@ async def student_app_chat(
         if m.id != user_msg.id
     ]
 
+    # ===== SURVEY MODE: check if this app is a survey and student already completed =====
+    is_survey = bool((app.model_config_json or {}).get("survey_mode"))
+    if is_survey:
+        from app.models.survey import SurveyCompletion
+        existing = await db.execute(
+            select(SurveyCompletion).where(
+                SurveyCompletion.app_id == app.id,
+                SurveyCompletion.student_id == student.id,
+            )
+        )
+        if existing.scalar_one_or_none():
+            # Student already completed — return a blocking message
+            async def _already_done():
+                yield f"data: {json.dumps({'type': 'conversation_id', 'conversation_id': str(conv.id)})}\n\n"
+                msg = "✅ Bạn đã hoàn thành khảo sát này rồi. Cảm ơn bạn đã tham gia!"
+                yield f"data: {json.dumps({'type': 'token', 'content': msg})}\n\n"
+                yield "data: [DONE]\n\n"
+            return StreamingResponse(_already_done(), media_type="text/event-stream", headers={
+                "Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no",
+            })
+
     # Build streaming response
     async def generate():
         # Always yield conversation_id first
@@ -366,6 +387,15 @@ async def student_app_chat(
                     graph_json=wf.graph_json,
                     query=body.message,
                     history=history,
+                    app_system_prompt=app.system_prompt or None,
+                    inputs={
+                        "student_id": str(student.id),
+                        "student_name": student.name,
+                        "student_email": student.email,
+                    },
+                    # Inject app config so google_sheets node can access
+                    # service account credentials + spreadsheet_id
+                    app_config=app.model_config_json or {},
                 )
                 full_response = result.get("answer", "")
                 sources = result.get("retriever_resources", [])
@@ -377,7 +407,9 @@ async def student_app_chat(
                 if full_response:
                     yield f"data: {json.dumps({'type': 'token', 'content': full_response})}\n\n"
                 else:
-                    yield f"data: {json.dumps({'type': 'error', 'content': 'Workflow returned empty response.'})}\n\n"
+                    # Fallback: workflow ran but produced no answer — show safe message
+                    fallback = "Xin lỗi, có lỗi xảy ra trong quá trình xử lý. Vui lòng thử lại hoặc liên hệ quản trị viên."
+                    yield f"data: {json.dumps({'type': 'token', 'content': fallback})}\n\n"
             except Exception as e:
                 yield f"data: {json.dumps({'type': 'error', 'content': f'Workflow error: {str(e)}'})}\n\n"
 
@@ -396,10 +428,11 @@ async def student_app_chat(
 
             # Build system prompt — with or without RAG context
             system = app.system_prompt or "You are a helpful assistant."
-            if sources:
+            if app.dataset_id:
                 context_parts = [f"[#{i}] {src['content']}" for i, src in enumerate(sources)]
-                context = "\n\n".join(context_parts)
+                context = "\n\n".join(context_parts) if context_parts else "No relevant context found."
                 system += f"\n\nDocument Context:\n{context}"
+                system += "\n\nCRITICAL INSTRUCTION: You must answer using ONLY the provided 'Document Context' above. If the context is empty or does not contain the answer, you MUST apologize politely and state that you cannot find this information in the documents. Do NOT use your own external knowledge to answer."
             messages = [{"role": "system", "content": system}]
             for msg in history[-10:]:
                 messages.append({"role": msg["role"], "content": msg["content"]})
@@ -408,7 +441,18 @@ async def student_app_chat(
             api_key = decrypt_key(provider.api_key_encrypted)
 
             try:
-                if provider.provider_name == "google":
+                if provider.provider_name == "openrouter":
+                    from app.services.chat import _stream_openai, OPENROUTER_BASE_URL
+                    async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=OPENROUTER_BASE_URL):
+                        yield chunk
+                        if "token" in chunk:
+                            try:
+                                data = json.loads(chunk[6:])
+                                if data.get("type") == "token":
+                                    full_response += data["content"]
+                            except:
+                                pass
+                elif provider.provider_name == "google":
                     from app.services.chat import _stream_google
                     async for chunk in _stream_google(api_key, provider.model_name, messages):
                         yield chunk
@@ -430,7 +474,7 @@ async def student_app_chat(
                                     full_response += data["content"]
                             except:
                                 pass
-                else:
+                else:  # openai direct
                     from app.services.chat import _stream_openai
                     async for chunk in _stream_openai(api_key, provider.model_name, messages):
                         yield chunk

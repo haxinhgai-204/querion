@@ -5,6 +5,7 @@ from typing import Any
 ALLOWED_NODE_TYPES = {
     "input", "retrieve", "compose_prompt", "llm_generate", "output",
     "parameter_extract", "http_request", "if_else", "answer", "code_execute",
+    "google_sheets",
 }
 
 

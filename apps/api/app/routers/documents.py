@@ -3,6 +3,18 @@
 import uuid
 
 import redis
+import sys
+import multiprocessing
+
+# Patch multiprocessing for Windows — rq internally uses fork context
+if sys.platform == "win32":
+    _original_get_context = multiprocessing.get_context
+    def _patched_get_context(method=None):
+        if method == "fork":
+            return _original_get_context("spawn")
+        return _original_get_context(method)
+    multiprocessing.get_context = _patched_get_context
+
 from rq import Queue
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, status
 from sqlalchemy import select, func
@@ -114,9 +126,10 @@ async def upload_document(
         document.status = DocumentStatus.indexing
         await db.commit()
 
-        conn = redis.from_url(settings.REDIS_URL)
-        q = Queue("querion-indexing", connection=conn)
-        q.enqueue("worker.tasks.index_document.index_document", str(doc_id))
+        if Queue is not None:
+            conn = redis.from_url(settings.REDIS_URL)
+            q = Queue("querion-indexing", connection=conn)
+            q.enqueue("worker.tasks.index_document.index_document", str(doc_id))
     except Exception:
         # If queue fails, keep as "uploaded" so user can retry manually
         document.status = DocumentStatus.uploaded
@@ -173,6 +186,17 @@ async def delete_document(
     except Exception:
         pass  # best-effort
 
+    # Explicitly delete chunks + embeddings to avoid cascade issues with orphan rows
+    from sqlalchemy import text as sql_text
+    await db.execute(
+        sql_text("DELETE FROM embeddings WHERE chunk_id IN (SELECT id FROM chunks WHERE document_id = :doc_id)"),
+        {"doc_id": doc_uuid},
+    )
+    await db.execute(
+        sql_text("DELETE FROM chunks WHERE document_id = :doc_id"),
+        {"doc_id": doc_uuid},
+    )
+
     await db.delete(document)
     await db.commit()
     return {"detail": "Document deleted"}
@@ -209,11 +233,13 @@ async def index_document(
     await db.commit()
 
     # Enqueue RQ job
-    conn = redis.from_url(settings.REDIS_URL)
-    q = Queue("querion-indexing", connection=conn)
-    job = q.enqueue("worker.tasks.index_document.index_document", str(doc_uuid))
-
-    return {"status": "indexing", "job_id": job.id}
+    if Queue is not None:
+        conn = redis.from_url(settings.REDIS_URL)
+        q = Queue("querion-indexing", connection=conn)
+        job = q.enqueue("worker.tasks.index_document.index_document", str(doc_uuid))
+        return {"status": "indexing", "job_id": job.id}
+    else:
+        return {"status": "indexing", "job_id": None}
 
 
 # ---------- Chunks endpoint ----------

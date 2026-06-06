@@ -47,6 +47,7 @@ const NODE_STYLES: Record<string, { color: string; bg: string; icon: string; lab
   llm_generate:      { color: "#a855f7", bg: "rgba(168,85,247,0.10)", icon: "🤖", label: "LLM" },
   parameter_extract: { color: "#14b8a6", bg: "rgba(20,184,166,0.10)", icon: "📋", label: "Parameter Extract" },
   http_request:      { color: "#f97316", bg: "rgba(249,115,22,0.10)", icon: "🌐", label: "HTTP Request" },
+  google_sheets:     { color: "#16a34a", bg: "rgba(22,163,74,0.10)",  icon: "📊", label: "Google Sheets" },
   code_execute:      { color: "#6366f1", bg: "rgba(99,102,241,0.10)", icon: "⚡", label: "Code Execute" },
   if_else:           { color: "#6b7280", bg: "rgba(107,114,128,0.10)", icon: "🔀", label: "If / Else" },
   answer:            { color: "#ec4899", bg: "rgba(236,72,153,0.10)", icon: "💬", label: "Answer" },
@@ -461,6 +462,85 @@ function WorkflowCanvasInner() {
                 <p className="text-[10px] -mt-1" style={{ color: "var(--muted)" }}>
                   Define main(args) → dict. Args: query, answer, extracted_params, etc.
                 </p>
+              </>
+            )}
+
+            {/* Google Sheets */}
+            {selectedNode.type === "google_sheets" && (
+              <>
+                {/* ── Credentials ── */}
+                <div className="rounded-lg p-2.5" style={{ background: "rgba(22,163,74,0.06)", border: "1px solid rgba(22,163,74,0.2)" }}>
+                  <p className="text-[10px] font-semibold mb-1.5" style={{ color: "#16a34a" }}>🔑 Google Service Account</p>
+                  <textarea
+                    value={(selectedNode.data?.service_account_json as string) || ""}
+                    onChange={(e) => updateNodeData("service_account_json", e.target.value)}
+                    rows={5}
+                    placeholder={'{\n  "type": "service_account",\n  "client_email": "...",\n  "private_key": "-----BEGIN RSA PRIVATE KEY-----\\n..."\n}'}
+                    className="w-full text-[10px] rounded-lg px-2 py-1.5 outline-none resize-y font-mono"
+                    style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }}
+                  />
+                  <p className="text-[9px] mt-1" style={{ color: "var(--muted)" }}>
+                    Dán Service Account JSON từ Google Cloud Console. Để trống nếu đã cấu hình trong App Settings.
+                  </p>
+                </div>
+
+                <Field label="Operation">
+                  <select value={(selectedNode.data?.operation as string) || "append_row"}
+                    onChange={(e) => updateNodeData("operation", e.target.value)}
+                    className="w-full text-xs rounded-lg px-3 py-2 outline-none"
+                    style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }}>
+                    <option value="find_row">Find Row (check duplicate)</option>
+                    <option value="append_row">Append Row (write data)</option>
+                  </select>
+                </Field>
+                <Field label="Spreadsheet ID">
+                  <input value={(selectedNode.data?.spreadsheet_id as string) || ""}
+                    onChange={(e) => updateNodeData("spreadsheet_id", e.target.value)}
+                    placeholder="1BxiMVs0XRA5nFMdKvBdBZjg..."
+                    className="w-full text-xs rounded-lg px-3 py-2 outline-none font-mono"
+                    style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }} />
+                </Field>
+                <Field label="Sheet Name">
+                  <input value={(selectedNode.data?.sheet_name as string) || "Sheet1"}
+                    onChange={(e) => updateNodeData("sheet_name", e.target.value)}
+                    className="w-full text-xs rounded-lg px-3 py-2 outline-none"
+                    style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }} />
+                </Field>
+
+                {/* find_row fields */}
+                {(selectedNode.data?.operation as string) === "find_row" && (<>
+                  <Field label="Search Column (0=A, 1=B…)">
+                    <input type="number" min={0} value={(selectedNode.data?.search_column as number) ?? 0}
+                      onChange={(e) => updateNodeData("search_column", parseInt(e.target.value) || 0)}
+                      className="w-full text-xs rounded-lg px-3 py-2 outline-none"
+                      style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }} />
+                  </Field>
+                  <Field label="Search Value">
+                    <input value={(selectedNode.data?.search_value as string) || ""}
+                      onChange={(e) => updateNodeData("search_value", e.target.value)}
+                      placeholder="{{student_id}}"
+                      className="w-full text-xs rounded-lg px-3 py-2 outline-none font-mono"
+                      style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }} />
+                  </Field>
+                  <div className="rounded-lg p-2 text-[10px]" style={{ background: "rgba(20,184,166,0.06)", color: "#14b8a6", border: "1px solid rgba(20,184,166,0.2)" }}>
+                    Output: <code>google_sheets_found</code> = &quot;true&quot; / &quot;false&quot;<br/>
+                    → dùng trong <strong>if_else</strong>: variable = <code>google_sheets_found</code>, operator = equals, value = true
+                  </div>
+                </>)}
+
+                {/* append_row fields */}
+                {((selectedNode.data?.operation as string) === "append_row" || !(selectedNode.data?.operation)) && (<>
+                  <Field label="Row Mapping (JSON: header → value)">
+                    <textarea
+                      value={JSON.stringify(selectedNode.data?.row_mapping || {}, null, 2)}
+                      onChange={(e) => { try { updateNodeData("row_mapping", JSON.parse(e.target.value)); } catch {} }}
+                      rows={8} className="w-full text-xs rounded-lg px-3 py-2 outline-none resize-y font-mono"
+                      style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }} />
+                  </Field>
+                  <p className="text-[10px] -mt-1" style={{ color: "var(--muted)" }}>
+                    Keys = column headers. Values support {"{{placeholders}}"} and <code>NOW()</code>.
+                  </p>
+                </>)}
               </>
             )}
 

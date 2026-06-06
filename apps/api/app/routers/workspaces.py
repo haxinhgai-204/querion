@@ -141,7 +141,9 @@ async def delete_workspace(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete workspace (super_admin or owner)."""
+    """Delete workspace (super_admin or owner). Cascades all related data."""
+    from sqlalchemy import delete as sql_delete
+
     ws_uuid = uuid.UUID(workspace_id)
     result = await db.execute(select(Workspace).where(Workspace.id == ws_uuid))
     workspace = result.scalar_one_or_none()
@@ -159,6 +161,9 @@ async def delete_workspace(
         if mem_result.scalar_one_or_none() is None:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can delete workspace")
 
-    await db.delete(workspace)
+    # Use direct SQL DELETE — let PostgreSQL FK CASCADE handle children
+    # This avoids loading large object graphs (datasets/documents/chunks/embeddings)
+    # into memory which can cause timeouts or ORM session conflicts.
+    await db.execute(sql_delete(Workspace).where(Workspace.id == ws_uuid))
     await db.commit()
     return {"detail": "Workspace deleted"}

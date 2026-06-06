@@ -39,6 +39,8 @@ def embed_texts(
 
     if provider_name == "google":
         raw = _embed_google(texts, api_key, model_name, batch_size)
+    elif provider_name == "openrouter":
+        raw = _embed_openrouter(texts, api_key, model_name, batch_size)
     else:
         raw = _embed_openai(texts, api_key, model_name, batch_size)
 
@@ -84,3 +86,18 @@ def _embed_google(
 
     return all_embeddings
 
+
+def _embed_openrouter(
+    texts: list[str], api_key: str, model_name: str, batch_size: int
+) -> list[list[float]]:
+    """Embed using OpenRouter API (OpenAI-compatible with custom base_url)."""
+    client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+    all_embeddings: list[list[float]] = []
+
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i : i + batch_size]
+        response = client.embeddings.create(input=batch, model=model_name)
+        batch_embeddings = [item.embedding for item in response.data]
+        all_embeddings.extend(batch_embeddings)
+
+    return all_embeddings

@@ -3,7 +3,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
@@ -124,17 +124,23 @@ async def update_user(
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_200_OK)
-async def deactivate_user(
+async def delete_user(
     user_id: str,
-    _: User = Depends(require_super_admin),
+    current_user: User = Depends(require_super_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Soft-delete (deactivate) a user."""
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
+    """Permanently delete a user (super_admin only). Cannot delete self."""
+    user_uuid = uuid.UUID(user_id)
+    if current_user.id == user_uuid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account")
+
+    # Check existence
+    result = await db.execute(select(User).where(User.id == user_uuid))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    user.is_active = False
+    # Use direct delete to avoid ORM session conflicts with relationships
+    await db.execute(delete(User).where(User.id == user_uuid))
     await db.commit()
-    return {"detail": "User deactivated"}
+    return {"detail": "User deleted"}

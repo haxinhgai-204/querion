@@ -1,9 +1,15 @@
 """Datasets CRUD router."""
 
 import uuid
+import logging
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, func
+
+logger = logging.getLogger(__name__)
+from pydantic import BaseModel
+from sqlalchemy import select, func, text as sql_text
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.deps import get_db
@@ -11,6 +17,7 @@ from app.auth.deps import get_workspace_context, require_ws_role, WorkspaceConte
 from app.models.user_workspace import WsRole
 from app.models.dataset import Dataset
 from app.models.document import Document
+from app.models.app import App
 from app.schemas.datasets import (
     DatasetCreate,
     DatasetResponse,
@@ -19,6 +26,12 @@ from app.schemas.datasets import (
 )
 
 router = APIRouter(prefix="/v1/datasets", tags=["datasets"])
+
+
+class DatasetUsageResponse(BaseModel):
+    dataset_id: str
+    document_count: int
+    apps: List[dict]  # [{id, name}]
 
 
 # -- Helpers --
@@ -123,13 +136,13 @@ async def get_dataset(
     )
 
 
-@router.delete("/{dataset_id}", status_code=status.HTTP_200_OK)
-async def delete_dataset(
+@router.get("/{dataset_id}/usage", response_model=DatasetUsageResponse)
+async def get_dataset_usage(
     dataset_id: str,
-    ws_ctx: WorkspaceContext = Depends(require_ws_role(WsRole.editor)),
+    ws_ctx: WorkspaceContext = Depends(require_ws_role(WsRole.viewer)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Delete a dataset and all its documents."""
+    """Check how many documents and which apps are using this dataset."""
     ds_uuid = uuid.UUID(dataset_id)
     result = await db.execute(
         select(Dataset).where(
@@ -141,14 +154,99 @@ async def delete_dataset(
     if not dataset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
 
-    # Delete MinIO files for all documents
-    from app.storage import delete_file
-    for doc in dataset.documents:
-        try:
-            delete_file(doc.storage_key)
-        except Exception:
-            pass  # best-effort cleanup
+    doc_count_result = await db.execute(
+        select(func.count(Document.id)).where(Document.dataset_id == ds_uuid)
+    )
+    doc_count = doc_count_result.scalar() or 0
 
-    await db.delete(dataset)
-    await db.commit()
+    apps_result = await db.execute(
+        select(App).where(
+            App.dataset_id == ds_uuid,
+            App.workspace_id == ws_ctx.workspace_id,
+        )
+    )
+    linked_apps = [{"id": str(a.id), "name": a.name} for a in apps_result.scalars().all()]
+
+    return DatasetUsageResponse(
+        dataset_id=dataset_id,
+        document_count=doc_count,
+        apps=linked_apps,
+    )
+
+
+@router.delete("/{dataset_id}", status_code=status.HTTP_200_OK)
+async def delete_dataset(
+    dataset_id: str,
+    ws_ctx: WorkspaceContext = Depends(require_ws_role(WsRole.editor)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a dataset and all its documents."""
+    ds_uuid = uuid.UUID(dataset_id)
+    logger.info("DELETE dataset request: id=%s workspace=%s", dataset_id, ws_ctx.workspace_id)
+
+    # Load dataset with documents eagerly to avoid lazy-load issues in async session
+    result = await db.execute(
+        select(Dataset)
+        .options(selectinload(Dataset.documents))
+        .where(
+            Dataset.id == ds_uuid,
+            Dataset.workspace_id == ws_ctx.workspace_id,
+        )
+    )
+    dataset = result.scalar_one_or_none()
+    if not dataset:
+        logger.warning("DELETE dataset not found: id=%s", dataset_id)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Dataset not found")
+
+    logger.info("Deleting dataset %r with %d docs", dataset.name, len(dataset.documents))
+
+    # Collect storage keys before deleting from DB
+    storage_keys = [doc.storage_key for doc in dataset.documents]
+
+    try:
+        # Delete dataset (cascade="all, delete-orphan" will remove child documents)
+        await db.execute(
+            sql_text(
+                "DELETE FROM embeddings "
+                "WHERE chunk_id IN (SELECT id FROM chunks WHERE dataset_id = :dataset_id)"
+            ),
+            {"dataset_id": ds_uuid},
+        )
+        await db.execute(
+            sql_text("DELETE FROM chunks WHERE dataset_id = :dataset_id"),
+            {"dataset_id": ds_uuid},
+        )
+        await db.execute(
+            sql_text("DELETE FROM documents WHERE dataset_id = :dataset_id"),
+            {"dataset_id": ds_uuid},
+        )
+        await db.execute(
+            sql_text("UPDATE apps SET dataset_id = NULL WHERE dataset_id = :dataset_id"),
+            {"dataset_id": ds_uuid},
+        )
+        await db.execute(
+            sql_text(
+                "DELETE FROM datasets "
+                "WHERE id = :dataset_id AND workspace_id = :workspace_id"
+            ),
+            {"dataset_id": ds_uuid, "workspace_id": ws_ctx.workspace_id},
+        )
+        await db.commit()
+        logger.info("Dataset %s deleted from DB successfully", dataset_id)
+    except Exception as exc:
+        await db.rollback()
+        logger.error("Failed to delete dataset %s: %s", dataset_id, exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Delete failed: {exc}",
+        )
+
+    # Best-effort: clean up MinIO files after DB deletion succeeds
+    from app.storage import delete_file
+    for key in storage_keys:
+        try:
+            delete_file(key)
+        except Exception as exc:
+            logger.warning("Failed to delete MinIO file %s: %s", key, exc)
+
     return {"detail": "Dataset deleted"}

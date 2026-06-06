@@ -28,6 +28,6 @@ def download(storage_key: str) -> str:
     client = _get_client()
     suffix = "." + storage_key.rsplit(".", 1)[-1] if "." in storage_key else ""
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
-    client.fget_object(MINIO_BUCKET, storage_key, tmp.name)
     tmp.close()
+    client.fget_object(MINIO_BUCKET, storage_key, tmp.name)
     return tmp.name

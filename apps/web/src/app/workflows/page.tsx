@@ -1,9 +1,13 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/providers/I18nProvider";
-import { WorkflowResponse, createWorkflow, listWorkflows, deleteWorkflow } from "@/lib/api/workflows";
+import {
+  WorkflowResponse, WorkflowTemplate,
+  createWorkflow, listWorkflows, deleteWorkflow,
+  listWorkflowTemplates, createWorkflowFromTemplate,
+} from "@/lib/api/workflows";
 
 export default function WorkflowsPage() {
   const { t } = useI18n();
@@ -11,7 +15,10 @@ export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState<WorkflowResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [deleting, setDeleting] = useState<string | null>(null); // workflow id to delete
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
+  const [creatingFromTemplate, setCreatingFromTemplate] = useState<string | null>(null);
 
   const fetchWorkflows = useCallback(async () => {
     try {
@@ -22,6 +29,23 @@ export default function WorkflowsPage() {
   }, []);
 
   useEffect(() => { fetchWorkflows(); }, [fetchWorkflows]);
+
+  const openTemplates = async () => {
+    setShowTemplates(true);
+    try {
+      const tmpl = await listWorkflowTemplates();
+      setTemplates(tmpl);
+    } catch { /* silent */ }
+  };
+
+  const handleCreateFromTemplate = async (templateId: string) => {
+    setCreatingFromTemplate(templateId);
+    try {
+      const wf = await createWorkflowFromTemplate(templateId);
+      router.push(`/workflows/${wf.id}`);
+    } catch { /* silent */ }
+    finally { setCreatingFromTemplate(null); }
+  };
 
   const handleCreate = async () => {
     setCreating(true);
@@ -55,17 +79,33 @@ export default function WorkflowsPage() {
             Build RAG pipelines with a visual editor
           </p>
         </div>
-        <button
-          onClick={handleCreate}
-          disabled={creating}
-          className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
-          style={{ background: "var(--accent)", color: "#fff" }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          New Workflow
-        </button>
+        <div className="flex items-center gap-2">
+          {/* From Template button */}
+          <button
+            onClick={openTemplates}
+            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
+            style={{ background: "rgba(168,85,247,0.12)", color: "#a855f7", border: "1px solid rgba(168,85,247,0.2)" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M9 11.5H14M11.5 9V14" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+            Từ Template
+          </button>
+          <button
+            onClick={handleCreate}
+            disabled={creating}
+            className="flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all"
+            style={{ background: "var(--accent)", color: "#fff" }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            New Workflow
+          </button>
+        </div>
       </div>
 
       {/* List */}
@@ -84,7 +124,14 @@ export default function WorkflowsPage() {
             </svg>
           </div>
           <h3 className="text-lg font-semibold mb-1" style={{ color: "var(--foreground)" }}>No workflows yet</h3>
-          <p className="text-sm" style={{ color: "var(--muted)" }}>Create your first visual RAG pipeline</p>
+          <p className="text-sm mb-4" style={{ color: "var(--muted)" }}>Create your first visual RAG pipeline</p>
+          <button
+            onClick={openTemplates}
+            className="rounded-xl px-4 py-2 text-sm font-medium"
+            style={{ background: "rgba(168,85,247,0.12)", color: "#a855f7" }}
+          >
+            📋 Xem Template có sẵn
+          </button>
         </div>
       ) : (
         <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))" }}>
@@ -141,6 +188,81 @@ export default function WorkflowsPage() {
         </div>
       )}
 
+      {/* Template Modal */}
+      {showTemplates && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}
+          onClick={() => setShowTemplates(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="rounded-2xl p-6"
+            style={{ background: "var(--card)", border: "1px solid var(--border)", width: 560, maxHeight: "80vh", overflow: "auto" }}
+          >
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="text-base font-semibold" style={{ color: "var(--foreground)" }}>📋 Workflow Templates</h3>
+                <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>Chọn template để tạo workflow với các node đã được cấu hình sẵn</p>
+              </div>
+              <button onClick={() => setShowTemplates(false)} className="rounded-lg p-1.5" style={{ color: "var(--muted)" }}>✕</button>
+            </div>
+
+            {templates.length === 0 ? (
+              <div className="flex justify-center py-8">
+                <div className="animate-spin rounded-full h-5 w-5 border-2 border-current" style={{ borderTopColor: "transparent", color: "var(--accent)" }} />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {templates.map((tmpl) => (
+                  <div
+                    key={tmpl.id}
+                    className="rounded-xl p-4 transition-all"
+                    style={{ background: "var(--background)", border: "1px solid var(--border)" }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <span className="text-2xl shrink-0 mt-0.5">{tmpl.icon}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <h4 className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>{tmpl.name}</h4>
+                            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-full"
+                              style={{ background: "rgba(236,72,153,0.12)", color: "#ec4899" }}>
+                              {tmpl.type}
+                            </span>
+                          </div>
+                          <p className="text-xs leading-relaxed mb-2" style={{ color: "var(--muted)" }}>{tmpl.description}</p>
+                          <div className="flex flex-wrap gap-1">
+                            {tmpl.tags.map((tag) => (
+                              <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full"
+                                style={{ background: "var(--accent-glow)", color: "var(--accent)" }}>
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleCreateFromTemplate(tmpl.id)}
+                        disabled={creatingFromTemplate === tmpl.id}
+                        className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
+                        style={{ background: "var(--accent)", color: "#fff", opacity: creatingFromTemplate === tmpl.id ? 0.6 : 1 }}
+                      >
+                        {creatingFromTemplate === tmpl.id ? (
+                          <span className="flex items-center gap-1">
+                            <div className="animate-spin rounded-full h-3 w-3 border border-current" style={{ borderTopColor: "transparent" }} />
+                            Đang tạo...
+                          </span>
+                        ) : "Dùng Template"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {deleting && (
         <div
@@ -188,3 +310,4 @@ export default function WorkflowsPage() {
     </div>
   );
 }
+

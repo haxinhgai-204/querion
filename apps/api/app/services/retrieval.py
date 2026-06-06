@@ -33,6 +33,11 @@ async def embed_query(query: str, provider: AiProvider) -> list[float]:
             model_name = f"models/{model_name}"
         result = client.models.embed_content(model=model_name, contents=[query])
         vec = list(result.embeddings[0].values)
+    elif provider.provider_name == "openrouter":
+        import openai
+        client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        response = client.embeddings.create(input=[query], model=provider.model_name)
+        vec = response.data[0].embedding
     else:
         import openai
         client = openai.OpenAI(api_key=api_key)
@@ -50,6 +55,7 @@ async def retrieve(
     query: str,
     dataset_ids: list[UUID],
     top_k: int = 5,
+    similarity_threshold: float = 0.35,
 ) -> list[dict]:
     """Embed query → pgvector cosine search → return top_k chunks.
 
@@ -99,4 +105,5 @@ async def retrieve(
             "score": round(1 - row.distance, 4),
         }
         for row in rows
+        if (1 - row.distance) >= similarity_threshold
     ]

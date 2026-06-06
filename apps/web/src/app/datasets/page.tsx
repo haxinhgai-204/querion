@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/providers/I18nProvider";
-import { listDatasets, createDataset, deleteDataset, DatasetResponse } from "@/lib/api/datasets";
+import {
+  listDatasets,
+  createDataset,
+  deleteDataset,
+  getDatasetUsage,
+  DatasetResponse,
+  DatasetUsageResponse,
+} from "@/lib/api/datasets";
 import CreateDatasetModal from "@/components/datasets/CreateDatasetModal";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 
@@ -14,8 +21,10 @@ export default function DatasetsPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteUsage, setDeleteUsage] = useState<DatasetUsageResponse | null>(null);
+  const [checkingUsage, setCheckingUsage] = useState(false);
 
-  const fetchDatasets = useCallback(async () => {
+  const fetchDatasets = useCallback(async () => {//lấy danh sách dts
     try {
       const data = await listDatasets();
       setDatasets(data);
@@ -26,24 +35,81 @@ export default function DatasetsPage() {
     }
   }, []);
 
-  useEffect(() => { fetchDatasets(); }, [fetchDatasets]);
+  useEffect(() => { fetchDatasets(); }, [fetchDatasets]);// vào trang dataset hàm fetch tự chạy
 
   const handleCreate = async (name: string, description?: string) => {
     await createDataset(name, description);
     await fetchDatasets();
   };
 
+  const handleDeleteClick = async (e: React.MouseEvent, datasetId: string) => {
+    e.stopPropagation();
+    setCheckingUsage(true);
+    try {
+      const usage = await getDatasetUsage(datasetId);
+      setDeleteUsage(usage);
+      setDeleteTarget(datasetId);
+    } catch {
+      // fallback: show basic confirm without usage info
+      setDeleteUsage(null);
+      setDeleteTarget(datasetId);
+    } finally {
+      setCheckingUsage(false);
+    }
+  };
+
   const handleDeleteConfirmed = async () => {
     if (!deleteTarget) return;
     await deleteDataset(deleteTarget);
     setDeleteTarget(null);
+    setDeleteUsage(null);
     await fetchDatasets();
   };
+
+  const handleDeleteCancel = () => {
+    setDeleteTarget(null);
+    setDeleteUsage(null);
+  };
+
+  // Build warning message based on usage info
+  const getDeleteMessage = (): string => {
+    if (!deleteUsage) return t("deleteConfirm", "datasets");
+
+    const hasDocuments = deleteUsage.document_count > 0;
+    const linkedApps = deleteUsage.apps;
+
+    if (!hasDocuments && linkedApps.length === 0) {
+      return t("deleteConfirm", "datasets");
+    }
+
+    const parts: string[] = [];
+
+    if (hasDocuments) {
+      parts.push(
+        t("deleteWarnDocuments", "datasets").replace("{count}", String(deleteUsage.document_count))
+      );
+    }
+
+    if (linkedApps.length > 0) {
+      const appNames = linkedApps.map((a) => `"${a.name}"`).join(", ");
+      parts.push(t("deleteWarnApps", "datasets").replace("{apps}", appNames));
+    }
+
+    parts.push(t("deleteWarnConfirm", "datasets"));
+    return parts.join(" ");
+  };
+
+  const isUsageWarning =
+    !!deleteUsage &&
+    (deleteUsage.document_count > 0 || deleteUsage.apps.length > 0);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-current" style={{ borderTopColor: "transparent", color: "var(--accent)" }} />
+        <div
+          className="animate-spin rounded-full h-8 w-8 border-2 border-current"
+          style={{ borderTopColor: "transparent", color: "var(--accent)" }}
+        />
       </div>
     );
   }
@@ -91,14 +157,25 @@ export default function DatasetsPage() {
           </p>
         </div>
       ) : (
-        <div className="responsive-table-wrap rounded-xl overflow-hidden" style={{ border: "1px solid var(--border)", background: "var(--card)" }}>
+        <div
+          className="responsive-table-wrap rounded-xl overflow-hidden"
+          style={{ border: "1px solid var(--border)", background: "var(--card)" }}
+        >
           <table className="w-full text-sm">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: "var(--muted)" }}>{t("table.name", "datasets")}</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: "var(--muted)" }}>{t("table.documents", "datasets")}</th>
-                <th className="text-left px-4 py-3 font-medium" style={{ color: "var(--muted)" }}>{t("table.created", "datasets")}</th>
-                <th className="text-right px-4 py-3 font-medium" style={{ color: "var(--muted)" }}>{t("table.actions", "datasets")}</th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: "var(--muted)" }}>
+                  {t("table.name", "datasets")}
+                </th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: "var(--muted)" }}>
+                  {t("table.documents", "datasets")}
+                </th>
+                <th className="text-left px-4 py-3 font-medium" style={{ color: "var(--muted)" }}>
+                  {t("table.created", "datasets")}
+                </th>
+                <th className="text-right px-4 py-3 font-medium" style={{ color: "var(--muted)" }}>
+                  {t("table.actions", "datasets")}
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -114,7 +191,9 @@ export default function DatasetsPage() {
                   <td className="px-4 py-3">
                     <div>
                       <p className="font-medium" style={{ color: "var(--foreground)" }}>{ds.name}</p>
-                      {ds.description && <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>{ds.description}</p>}
+                      {ds.description && (
+                        <p className="text-xs mt-0.5" style={{ color: "var(--muted)" }}>{ds.description}</p>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -130,15 +209,37 @@ export default function DatasetsPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={(e) => { e.stopPropagation(); setDeleteTarget(ds.id); }}
+                      id={`btn-delete-dataset-${ds.id}`}
+                      onClick={(e) => handleDeleteClick(e, ds.id)}
+                      disabled={checkingUsage}
                       className="rounded-lg p-1.5 transition-all duration-200"
                       style={{ color: "var(--muted)" }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.1)"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.background = "transparent"; }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = "#ef4444";
+                        e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = "var(--muted)";
+                        e.currentTarget.style.background = "transparent";
+                      }}
                     >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <path d="M3 4H13M5.5 4V3C5.5 2.44772 5.94772 2 6.5 2H9.5C10.0523 2 10.5 2.44772 10.5 3V4M6.5 7V11M9.5 7V11M4 4L4.5 13C4.5 13.5523 4.94772 14 5.5 14H10.5C11.0523 14 11.5 13.5523 11.5 13L12 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
+                      {checkingUsage ? (
+                        <svg width="16" height="16" viewBox="0 0 16 16" className="animate-spin">
+                          <circle
+                            cx="8" cy="8" r="6"
+                            stroke="currentColor" strokeWidth="1.5"
+                            strokeDasharray="30" strokeDashoffset="10"
+                            fill="none"
+                          />
+                        </svg>
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                          <path
+                            d="M3 4H13M5.5 4V3C5.5 2.44772 5.94772 2 6.5 2H9.5C10.0523 2 10.5 2.44772 10.5 3V4M6.5 7V11M9.5 7V11M4 4L4.5 13C4.5 13.5523 4.94772 14 5.5 14H10.5C11.0523 14 11.5 13.5523 11.5 13L12 4"
+                            stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
                     </button>
                   </td>
                 </tr>
@@ -156,11 +257,16 @@ export default function DatasetsPage() {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title={t("title", "datasets")}
-        message={t("deleteConfirm", "datasets")}
+        title={
+          isUsageWarning
+            ? t("deleteWarnTitle", "datasets")
+            : t("deleteConfirmTitle", "datasets")
+        }
+        message={getDeleteMessage()}
+        confirmLabel={t("deleteConfirmBtn", "datasets")}
         variant="danger"
         onConfirm={handleDeleteConfirmed}
-        onCancel={() => setDeleteTarget(null)}
+        onCancel={handleDeleteCancel}
       />
     </div>
   );

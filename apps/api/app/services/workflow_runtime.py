@@ -25,11 +25,15 @@ async def run_workflow(
     inputs: dict[str, Any] | None = None,
     history: list[dict] | None = None,
     run: Run | None = None,
+    app_system_prompt: str | None = None,
+    app_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Execute a validated workflow/chatflow graph and return answer + citations.
 
     Args:
         history: conversation history for chatflow memory (list of {role, content})
+        app_system_prompt: system prompt from the App config (UI). If provided,
+            it overrides the workflow node's own system_prompt field via {{system_prompt}}.
     """
     nodes = graph_json.get("nodes", [])
     edges = graph_json.get("edges", [])
@@ -65,7 +69,13 @@ async def run_workflow(
         "citations": [],
         "extracted_params": {},
         "history": history or [],
+        # App-level system prompt injected from App.system_prompt (UI config).
+        # Used by compose_prompt node via {{system_prompt}} placeholder.
+        "app_system_prompt": app_system_prompt or "",
+        # App model_config_json — passed through to google_sheets node for credentials
+        "app_config": app_config or {},
     }
+    print(f"\n[WORKFLOW] START | query={query[:60]!r} | nodes={len(nodes)} | history_len={len(history or [])}")
 
     # Execute graph (supports if_else branching)
     current_id: str | None = start
@@ -80,6 +90,8 @@ async def run_workflow(
         node_type = node["type"]
         node_data = node.get("data", {})
 
+        print(f"[WORKFLOW]   exec node={current_id!r} type={node_type!r}")
+
         # Log step start (if observability enabled)
         step = None
         if run:
@@ -87,6 +99,7 @@ async def run_workflow(
                                         input_data={"query": state["query"][:200]})
 
         await _execute_node(db, node_type, node_data, state)
+        print(f"[WORKFLOW]   done  node={current_id!r} | answer={state.get('answer','')[:50]!r} | params={list(state.get('extracted_params',{}).keys())} | _branch={state.get('_branch','')!r}")
 
         # Log step end
         if run and step:
@@ -98,6 +111,7 @@ async def run_workflow(
         # Find next node
         outgoing = adj.get(current_id, [])
         if not outgoing:
+            print(f"[WORKFLOW]   no outgoing from {current_id!r} — stop")
             break
         elif node_type == "if_else" and len(outgoing) >= 2:
             # If/else: pick branch based on condition result
@@ -116,9 +130,13 @@ async def run_workflow(
                 true_edge = outgoing[0]
                 false_edge = outgoing[1]
 
-            current_id = true_edge["target"] if branch == "true" else false_edge["target"]
+            chosen = true_edge["target"] if branch == "true" else false_edge["target"]
+            print(f"[WORKFLOW]   if_else branch={branch!r} → {chosen!r}")
+            current_id = chosen
         else:
             current_id = outgoing[0]["target"]
+
+    print(f"[WORKFLOW] END | final_answer={state.get('answer','')[:80]!r}")
 
     # Complete run
     if run:
@@ -169,9 +187,25 @@ async def _execute_node(
             context_parts.append(f"[#{i}] {chunk['content']}")
         context = "\n\n".join(context_parts) if context_parts else ""
 
+        # Resolve system_prompt: App-level takes priority over node-level
+        resolved_system_prompt = state.get("app_system_prompt") or node_data.get("system_prompt", "")
+
         prompt_text = template.replace("{{query}}", state["query"])
         prompt_text = prompt_text.replace("{{context}}", context)
-        prompt_text = prompt_text.replace("{{system_prompt}}", node_data.get("system_prompt", ""))
+        prompt_text = prompt_text.replace("{{system_prompt}}", resolved_system_prompt)
+
+        # Inject extracted_params as readable JSON
+        extracted_str = json.dumps(state.get("extracted_params", {}), ensure_ascii=False, indent=2)
+        prompt_text = prompt_text.replace("{{extracted_params}}", extracted_str)
+
+        # Inject inputs (student context, etc.)
+        for k, v in (state.get("inputs") or {}).items():
+            prompt_text = prompt_text.replace(f"{{{{inputs.{k}}}}}", str(v) if v is not None else "")
+            prompt_text = prompt_text.replace(f"{{{{{k}}}}}", str(v) if v is not None else "")
+
+        # If the template doesn't use {{system_prompt}} but app has one, prepend it
+        if state.get("app_system_prompt") and "{{system_prompt}}" not in template:
+            prompt_text = state["app_system_prompt"] + "\n\n" + prompt_text
 
         # Include history for chatflow memory
         messages: list[dict] = []
@@ -201,7 +235,8 @@ async def _execute_node(
             messages=messages,
             temperature=temperature, max_tokens=max_tokens,
         )
-        state["answer"] = answer
+        # Normalize: LLM may return None (content filter, tool_calls, etc.)
+        state["answer"] = answer or "Xin lỗi, tôi không thể tạo phản hồi lúc này. Vui lòng thử lại."
 
     elif node_type == "parameter_extract":
         # Use LLM to extract structured parameters from the latest message
@@ -259,13 +294,11 @@ If a field cannot be determined from the conversation, use null.
         if not url:
             return
 
-        # Replace variables in body template
-        body_str = body_template
-        body_str = body_str.replace("{{query}}", state["query"])
-        body_str = body_str.replace("{{answer}}", state.get("answer", ""))
-        # Replace extracted params
-        for k, v in state.get("extracted_params", {}).items():
-            body_str = body_str.replace(f"{{{{{k}}}}}", str(v) if v is not None else "")
+        # Apply template substitution to URL (supports GET query params like ?student_id={{student_id}})
+        url = _apply_template(url, state)
+
+        # Apply template substitution to body
+        body_str = _apply_template(body_template, state)
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -285,6 +318,118 @@ If a field cannot be determined from the conversation, use null.
                 }
         except Exception as e:
             state["http_response"] = {"status": 0, "body": str(e)}
+
+    elif node_type == "google_sheets":
+        # ── Google Sheets node — tương tác trực tiếp với Google Sheets API v4 ──
+        # Node config:
+        #   service_account_json: str  (JSON string của Service Account — dán thẳng vào node)
+        #   operation:            "find_row" | "append_row"
+        #   spreadsheet_id:       Sheet ID (từ URL Google Sheets)
+        #   sheet_name:           Tên tab, mặc định "Sheet1"
+        #   [find_row]  search_column: int (0=A), search_value: str (hỗ trợ {{placeholder}})
+        #   [append_row] row_mapping: dict { "Header": "{{placeholder}} hoặc NOW()" }
+        #
+        # Output variables:
+        #   find_row    → state["google_sheets_found"] = "true" / "false"
+        #   append_row  → state["google_sheets_status"] = "success" / "error:..."
+
+        operation      = node_data.get("operation", "append_row")
+        spreadsheet_id = _apply_template(node_data.get("spreadsheet_id", ""), state)
+        sheet_name     = node_data.get("sheet_name", "Sheet1")
+
+        # ── Credentials resolution (node-level beats app-level) ──────────────
+        # Priority 1: service_account_json dán trực tiếp vào node config
+        sa_raw = node_data.get("service_account_json", "")
+        if sa_raw:
+            try:
+                import json as _json
+                service_account = _json.loads(sa_raw) if isinstance(sa_raw, str) else sa_raw
+            except Exception:
+                service_account = None
+        else:
+            # Priority 2: App Settings → model_config_json["google_service_account"]
+            service_account = (state.get("app_config") or {}).get("google_service_account")
+
+        if not service_account or not spreadsheet_id:
+            print(f"[google_sheets] No credentials or spreadsheet_id — skipping (op={operation})")
+            state["google_sheets_found"] = "false" if operation == "find_row" else ""
+            state["google_sheets_status"] = "error:no_credentials"
+            return
+
+        try:
+            from app.services.google_sheets import (
+                get_google_access_token, sheets_append, sheets_find_row, sheets_get,
+            )
+
+            if operation == "find_row":
+                search_col      = int(node_data.get("search_column", 0))
+                search_col_name = node_data.get("search_column_name", "")  # e.g. "Mã sinh viên"
+                search_val      = _apply_template(node_data.get("search_value", ""), state)
+                row_idx = await sheets_find_row(
+                    service_account, spreadsheet_id,
+                    search_col, search_val, sheet_name,
+                    column_name=search_col_name,  # preferred: find col by header name
+                )
+                found = row_idx is not None  # row_idx already skips header (i==0 skipped)
+                state["google_sheets_found"] = "true" if found else "false"
+                print(f"[google_sheets] find_row col={search_col_name or search_col!r} val={search_val!r} → found={found}")
+
+            elif operation == "append_row":
+                row_mapping: dict = node_data.get("row_mapping", {})
+
+                # Get or create header from the sheet
+                all_rows = await sheets_get(service_account, spreadsheet_id, sheet_name)
+                if not all_rows:
+                    # Auto-create header from row_mapping keys
+                    headers = list(row_mapping.keys())
+                    await sheets_append(service_account, spreadsheet_id, [headers], sheet_name)
+                    all_rows = [headers]
+                    print(f"[google_sheets] Created headers: {headers}")
+
+                existing_headers = all_rows[0]
+
+                # Detect stale/mismatched headers — if none of the existing headers
+                # match row_mapping keys, the header row is outdated → overwrite it
+                matching = sum(1 for h in existing_headers if h in row_mapping)
+                if matching == 0 and len(existing_headers) > 0:
+                    print(f"[google_sheets] Stale headers detected {existing_headers[:4]}... → overwriting with new headers")
+                    from app.services.google_sheets import sheets_clear_row
+                    try:
+                        await sheets_clear_row(service_account, spreadsheet_id, 1, sheet_name)
+                    except Exception:
+                        pass  # clear might fail on empty sheet, ignore
+                    headers = list(row_mapping.keys())
+                    await sheets_append(service_account, spreadsheet_id, [headers], sheet_name)
+                    print(f"[google_sheets] New headers written: {headers}")
+                else:
+                    headers = existing_headers
+
+                # Build row values in header order, applying template substitution
+                row = []
+                matched_cols = 0
+                for h in headers:
+                    template = row_mapping.get(h, "")
+                    if template == "NOW()":
+                        from datetime import datetime, timezone
+                        row.append(datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+                        matched_cols += 1
+                    elif template:
+                        row.append(_apply_template(template, state))
+                        matched_cols += 1
+                    else:
+                        row.append("")  # unknown column — leave blank
+
+                print(f"[google_sheets] Appending row: {matched_cols}/{len(headers)} columns filled")
+                await sheets_append(service_account, spreadsheet_id, [row], sheet_name)
+                state["google_sheets_status"] = "success"
+                print(f"[google_sheets] append_row SUCCESS")
+
+        except Exception as e:
+            print(f"[google_sheets node] Error: {e}")
+            if operation == "find_row":
+                state["google_sheets_found"] = "false"  # fail open (don't block student)
+            else:
+                state["google_sheets_status"] = f"error:{e}"
 
     elif node_type == "if_else":
         # Evaluate condition and set branch
@@ -320,7 +465,9 @@ If a field cannot be determined from the conversation, use null.
             http_resp = state.get("http_response", {})
             answer = answer.replace("{{http_status}}", str(http_resp.get("status", "")))
             state["answer"] = answer
-        # If no template, keep existing answer from llm_generate
+        # If no template, keep existing answer from llm_generate (already in state["answer"])
+        # Note: if still empty here, the caller (student_auth) will show a generic fallback
+
 
     elif node_type == "code_execute":
         # Execute Python code in a restricted sandbox
@@ -388,6 +535,34 @@ def _resolve_variable(state: dict, path: str) -> Any:
     return current
 
 
+def _apply_template(text: str, state: dict[str, Any]) -> str:
+    """Apply variable substitution to any template string.
+
+    Supported placeholders:
+        {{query}}                — current user message
+        {{answer}}               — current LLM answer
+        {{student_id}}           — injected from inputs (student context)
+        {{student_name}}         — same
+        {{student_email}}        — same
+        {{inputs.KEY}}           — any inputs field with explicit prefix
+        {{EXTRACTED_FIELD}}      — any field from extracted_params
+    """
+    text = text.replace("{{query}}", state.get("query", ""))
+    text = text.replace("{{answer}}", state.get("answer", ""))
+
+    # inputs context (student info + any extra inputs)
+    for k, v in (state.get("inputs") or {}).items():
+        text = text.replace(f"{{{{inputs.{k}}}}}", str(v) if v is not None else "")
+        text = text.replace(f"{{{{{k}}}}}", str(v) if v is not None else "")
+
+    # extracted parameters
+    for k, v in (state.get("extracted_params") or {}).items():
+        text = text.replace(f"{{{{{k}}}}}", str(v) if v is not None else "")
+
+    return text
+
+
+
 async def _call_llm(
     provider_name: str,
     api_key: str,
@@ -397,7 +572,19 @@ async def _call_llm(
     max_tokens: int = 4096,
 ) -> str:
     """Call LLM (non-streaming) and return full response text."""
-    if provider_name == "google":
+    if provider_name == "openrouter":
+        import openai
+        client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+        result = client.chat.completions.create(
+            model=model, max_tokens=max_tokens, temperature=temperature,
+            messages=messages,
+        )
+        if not result.choices:
+            return ""
+        content = result.choices[0].message.content
+        return content or ""  # normalize None → ""
+
+    elif provider_name == "google":
         from google import genai
         from google.genai.types import Content, Part
 
@@ -442,11 +629,14 @@ async def _call_llm(
         )
         return result.content[0].text if result.content else ""
 
-    else:  # openai
+    else:  # openai direct
         import openai
         client = openai.OpenAI(api_key=api_key)
         result = client.chat.completions.create(
             model=model, max_tokens=max_tokens, temperature=temperature,
             messages=messages,
         )
-        return result.choices[0].message.content if result.choices else ""
+        if not result.choices:
+            return ""
+        content = result.choices[0].message.content
+        return content or ""  # normalize None → ""

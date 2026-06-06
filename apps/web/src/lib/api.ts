@@ -70,7 +70,15 @@ export async function apiFetch<T = unknown>(
       throw new Error(error.detail || `API error: ${res.status}`);
     }
 
-    return res.json() as Promise<T>;
+    // Handle empty responses (e.g. 204 No Content from DELETE)
+    if (res.status === 204 || res.headers.get("content-length") === "0") {
+      return null as T;
+    }
+
+    const text = await res.text();
+    if (!text) return null as T;
+
+    return JSON.parse(text) as T;
   } catch (err: any) {
     if (err.name === "AbortError") {
       throw new Error("Request timed out");

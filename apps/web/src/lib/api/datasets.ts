@@ -27,6 +27,12 @@ export interface DatasetDetailResponse extends DatasetResponse {
   documents: DocumentResponse[];
 }
 
+export interface DatasetUsageResponse {
+  dataset_id: string;
+  document_count: number;
+  apps: { id: string; name: string }[];
+}
+
 export function createDataset(name: string, description?: string) {
   return api.post<DatasetResponse>("/v1/datasets", { name, description });
 }
@@ -37,6 +43,10 @@ export function listDatasets() {
 
 export function getDataset(id: string) {
   return api.get<DatasetDetailResponse>(`/v1/datasets/${id}`);
+}
+
+export function getDatasetUsage(id: string) {
+  return api.get<DatasetUsageResponse>(`/v1/datasets/${id}/usage`);
 }
 
 export function deleteDataset(id: string) {

@@ -57,9 +57,15 @@ export default function AdminWorkspacesPage() {
 
   const handleDeleteConfirmed = async () => {
     if (!deleteTarget) return;
-    await api.delete(`/v1/workspaces/${deleteTarget}`);
-    setDeleteTarget(null);
-    fetchAll();
+    setError("");
+    try {
+      await api.delete(`/v1/workspaces/${deleteTarget}`);
+      setDeleteTarget(null);
+      fetchAll();
+    } catch (err: any) {
+      setError(err.message);
+      setDeleteTarget(null);
+    }
   };
 
   if (!isSuper) {
@@ -85,17 +91,22 @@ export default function AdminWorkspacesPage() {
           className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white"
           style={{ background: "var(--accent)" }}>
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
           {t("buttons.create")} Workspace
         </button>
       </div>
 
+      {error && (
+        <div className="mb-6 p-4 rounded-xl text-sm" style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444" }}>
+          {error}
+        </div>
+      )}
+
       {showCreate && (
         <form onSubmit={handleCreate}
           className="rounded-xl p-4 mb-6 flex flex-wrap gap-3 items-end"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-          {error && <p className="w-full text-sm" style={{ color: "#ef4444" }}>{error}</p>}
           <input type="text" placeholder="Workspace name" required value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             className="flex-1 min-w-[200px] rounded-lg px-3 py-2 text-sm outline-none"

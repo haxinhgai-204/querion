@@ -261,3 +261,231 @@ async def get_run_steps(
         .order_by(RunStep.started_at)
     )
     return [_step_to_response(s) for s in result.scalars().all()]
+
+
+# ---------- App Chat (admin preview) ----------
+
+class AdminChatRequest(BaseModel):
+    message: str
+    conversation_id: str | None = None
+
+
+class ConversationItem(BaseModel):
+    id: str
+    title: str
+    message_count: int
+    updated_at: str
+
+
+@router.get("/apps/{app_id}/conversations", response_model=list[ConversationItem])
+async def list_app_conversations(
+    app_id: str,
+    db: AsyncSession = Depends(get_db),
+    ws_ctx: WorkspaceContext = Depends(require_ws_role(WsRole.viewer)),
+):
+    """List conversations for an app (admin chat preview)."""
+    from sqlalchemy import func
+    from app.models.conversation import Conversation
+    from app.models.message import Message
+
+    app = await db.get(App, uuid.UUID(app_id))
+    if not app or app.workspace_id != ws_ctx.workspace_id:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    result = await db.execute(
+        select(Conversation).where(
+            Conversation.app_id == uuid.UUID(app_id),
+            Conversation.student_id == None,  # admin conversations only
+        ).order_by(Conversation.updated_at.desc())
+    )
+    convs = result.scalars().all()
+
+    out = []
+    for conv in convs:
+        count = await db.execute(
+            select(func.count()).select_from(Message).where(Message.conversation_id == conv.id)
+        )
+        out.append(ConversationItem(
+            id=str(conv.id), title=conv.title,
+            message_count=count.scalar() or 0,
+            updated_at=conv.updated_at.isoformat(),
+        ))
+    return out
+
+
+@router.post("/apps/{app_id}/chat")
+async def admin_app_chat(
+    app_id: str,
+    body: AdminChatRequest,
+    db: AsyncSession = Depends(get_db),
+    ws_ctx: WorkspaceContext = Depends(require_ws_role(WsRole.viewer)),
+):
+    """Admin chat preview for an app — streaming SSE."""
+    import json
+    from datetime import datetime, timezone
+    from fastapi.responses import StreamingResponse
+    from app.models.conversation import Conversation
+    from app.models.message import Message
+    from app.services.chat import chat_stream, get_active_llm_provider, generate_title
+    from app.services.retrieval import retrieve
+    from app.services.encryption import decrypt_key
+    from sqlalchemy import func
+
+    app = await db.get(App, uuid.UUID(app_id))
+    if not app or app.workspace_id != ws_ctx.workspace_id:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    # Get or create conversation
+    if body.conversation_id:
+        result = await db.execute(
+            select(Conversation).where(
+                Conversation.id == uuid.UUID(body.conversation_id),
+                Conversation.app_id == uuid.UUID(app_id),
+            )
+        )
+        conv = result.scalar_one_or_none()
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+    else:
+        conv = Conversation(
+            workspace_id=ws_ctx.workspace_id,
+            dataset_id=app.dataset_id,
+            app_id=app.id,
+            title="New Chat",
+        )
+        db.add(conv)
+        await db.commit()
+        await db.refresh(conv)
+
+    # Save user message
+    user_msg = Message(conversation_id=conv.id, role="user", content=body.message)
+    db.add(user_msg)
+    await db.commit()
+
+    # Check if first
+    msg_count_result = await db.execute(
+        select(func.count()).select_from(Message).where(Message.conversation_id == conv.id)
+    )
+    is_first = (msg_count_result.scalar() or 0) == 1
+
+    # History
+    history_result = await db.execute(
+        select(Message).where(Message.conversation_id == conv.id).order_by(Message.created_at)
+    )
+    history = [
+        {"role": m.role, "content": m.content}
+        for m in history_result.scalars().all()
+        if m.id != user_msg.id
+    ]
+
+    async def generate():
+        yield f"data: {json.dumps({'type': 'conversation_id', 'conversation_id': str(conv.id)})}\n\n"
+
+        full_response = ""
+        sources = []
+
+        if app.workflow_id:
+            from app.models.workflow import Workflow
+            from app.services.workflow_runtime import run_workflow
+
+            wf = await db.get(Workflow, app.workflow_id)
+            if not wf or not wf.graph_json:
+                yield f"data: {json.dumps({'type': 'error', 'content': 'Workflow not found or empty.'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            try:
+                result = await run_workflow(db=db, graph_json=wf.graph_json, query=body.message, history=history, app_system_prompt=app.system_prompt or None)
+                full_response = result.get("answer", "")
+                sources = result.get("retriever_resources", [])
+                if sources:
+                    yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+                if full_response:
+                    yield f"data: {json.dumps({'type': 'token', 'content': full_response})}\n\n"
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+        else:
+            if app.dataset_id:
+                sources = await retrieve(db=db, query=body.message, dataset_ids=[app.dataset_id], top_k=5)
+                if sources:
+                    yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+
+            provider = await get_active_llm_provider(db)
+            if not provider:
+                yield f"data: {json.dumps({'type': 'error', 'content': 'No active LLM provider configured.'})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+
+            system = app.system_prompt or "You are a helpful assistant."
+            if app.dataset_id:
+                context = "\n\n".join(f"[#{i}] {s['content']}" for i, s in enumerate(sources)) if sources else "No relevant context found."
+                system += f"\n\nDocument Context:\n{context}"
+                system += "\n\nCRITICAL INSTRUCTION: You must answer using ONLY the provided 'Document Context' above. If the context is empty or does not contain the answer, you MUST apologize politely and state that you cannot find this information in the documents. Do NOT use your own external knowledge to answer."
+
+            messages = [{"role": "system", "content": system}]
+            for msg in history[-10:]:
+                messages.append({"role": msg["role"], "content": msg["content"]})
+            messages.append({"role": "user", "content": body.message})
+
+            api_key = decrypt_key(provider.api_key_encrypted)
+
+            try:
+                from app.services.chat import _stream_openai, OPENROUTER_BASE_URL, _stream_google, _stream_anthropic
+                if provider.provider_name == "openrouter":
+                    async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=OPENROUTER_BASE_URL):
+                        yield chunk
+                        try:
+                            data = json.loads(chunk[6:])
+                            if data.get("type") == "token":
+                                full_response += data["content"]
+                        except: pass
+                elif provider.provider_name == "google":
+                    async for chunk in _stream_google(api_key, provider.model_name, messages):
+                        yield chunk
+                        try:
+                            data = json.loads(chunk[6:])
+                            if data.get("type") == "token":
+                                full_response += data["content"]
+                        except: pass
+                elif provider.provider_name == "anthropic":
+                    async for chunk in _stream_anthropic(api_key, provider.model_name, messages):
+                        yield chunk
+                        try:
+                            data = json.loads(chunk[6:])
+                            if data.get("type") == "token":
+                                full_response += data["content"]
+                        except: pass
+                else:
+                    async for chunk in _stream_openai(api_key, provider.model_name, messages):
+                        yield chunk
+                        try:
+                            data = json.loads(chunk[6:])
+                            if data.get("type") == "token":
+                                full_response += data["content"]
+                        except: pass
+            except Exception as e:
+                yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+        if full_response:
+            assistant_msg = Message(
+                conversation_id=conv.id, role="assistant",
+                content=full_response, sources=sources[:3] if sources else None,
+            )
+            db.add(assistant_msg)
+            conv.updated_at = datetime.now(timezone.utc)
+            await db.commit()
+
+            if is_first:
+                try:
+                    title = await generate_title(db, body.message, full_response)
+                    if title:
+                        conv.title = title
+                        await db.commit()
+                        yield f"data: {json.dumps({'type': 'title', 'title': title})}\n\n"
+                except: pass
+
+    return StreamingResponse(generate(), media_type="text/event-stream", headers={
+        "Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no",
+    })

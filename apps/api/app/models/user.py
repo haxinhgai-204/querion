@@ -43,7 +43,7 @@ class User(Base):
     )
 
     # Relationships
-    workspace_memberships = relationship("UserWorkspace", back_populates="user", lazy="selectin")
+    workspace_memberships = relationship("UserWorkspace", back_populates="user", lazy="selectin", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<User id={self.id} email={self.email!r} role={self.role}>"

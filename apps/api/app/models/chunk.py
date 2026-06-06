@@ -33,7 +33,9 @@ class Chunk(Base):
     )
 
     # Relationships
-    document = relationship("Document", backref="chunks")
+    # passive_deletes=True: tell SQLAlchemy to rely on DB-level CASCADE for this FK
+    # rather than issuing a SET NULL UPDATE before the parent row is deleted.
+    document = relationship("Document", backref="chunks", passive_deletes=True)
     embedding = relationship("Embedding", back_populates="chunk", uselist=False, cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
