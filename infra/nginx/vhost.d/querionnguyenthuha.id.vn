@@ -1,0 +1,17 @@
+# Custom vhost overrides for querionnguyenthuha.id.vn
+# Disable buffering and compression for streaming API endpoints to avoid
+# content-encoding / chunking mismatches (SSE).
+
+# Apply to all proxied locations under /v1 (adjust if your API path differs)
+location ~ ^/v1/ {
+    # Prevent upstream or client compression negotiation
+    proxy_set_header Accept-Encoding "";
+
+    # Preserve streaming (SSE / chunked)
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_buffering off;
+
+    # Ensure nginx does not gzip the proxied response
+    gzip off;
+}
