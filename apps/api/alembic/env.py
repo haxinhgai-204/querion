@@ -17,8 +17,12 @@ if config.config_file_name is not None:
 # Import models so Alembic can detect them
 from app.db import Base  # noqa: E402
 import app.models  # noqa: E402, F401
+from app.config import settings
 
 target_metadata = Base.metadata
+
+# Override sqlalchemy.url from settings (which reads from .env)
+config.set_main_option("sqlalchemy.url", str(settings.DATABASE_URL))
 
 
 def run_migrations_offline() -> None:
