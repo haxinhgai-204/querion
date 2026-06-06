@@ -487,5 +487,5 @@ async def admin_app_chat(
                 except: pass
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers={
-        "Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no",
+        "Cache-Control": "no-cache, no-transform", "Connection": "keep-alive", "X-Accel-Buffering": "no",
     })

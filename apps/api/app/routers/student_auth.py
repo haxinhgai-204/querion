@@ -512,6 +512,6 @@ async def student_app_chat(
                     pass
 
     return StreamingResponse(generate(), media_type="text/event-stream", headers={
-        "Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no",
+        "Cache-Control": "no-cache, no-transform", "Connection": "keep-alive", "X-Accel-Buffering": "no",
     })
 
