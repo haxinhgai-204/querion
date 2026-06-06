@@ -3,7 +3,7 @@ services:
     image: pgvector/pgvector:pg16
     container_name: querion-postgres
     restart: unless-stopped
-    env_file: .env.production
+    env_file: .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-querion}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-querion_secret}
@@ -34,7 +34,7 @@ services:
     image: minio/minio
     container_name: querion-minio
     restart: unless-stopped
-    env_file: .env.production
+    env_file: .env
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
@@ -56,7 +56,7 @@ services:
       mc mb --ignore-existing local/$${MINIO_BUCKET:-querion-docs};
       echo 'Bucket created successfully';
       "
-    env_file: .env.production
+    env_file: .env
 
   api:
     build:
@@ -64,7 +64,7 @@ services:
       dockerfile: Dockerfile
     container_name: querion-api
     restart: unless-stopped
-    env_file: .env.production
+    env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
@@ -79,7 +79,7 @@ services:
       dockerfile: Dockerfile
     container_name: querion-worker
     restart: unless-stopped
-    env_file: .env.production
+    env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,7 +96,7 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     container_name: querion-web
     restart: unless-stopped
-    env_file: .env.production
+    env_file: .env
     depends_on:
       - api
 
