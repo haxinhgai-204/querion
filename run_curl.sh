@@ -1,0 +1,2 @@
+TOKEN="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiNmE3ZTU3ZC03YzEyLTRjYzgtOWExYS05OGYzMGEyZTE0OWYiLCJyb2xlIjoic3R1ZGVudCIsInR5cGUiOiJhY2Nlc3MiLCJleHAiOjE3ODA3NjAxOTR9.YiXWZPqjU_2LSwOEnUEgQV2g6Gj9np3QXSqumTtL750"
+curl -v -N -X POST -H "Content-Type: application/json" -H "Authorization: Bearer $TOKEN" -d '{"message":"hi"}' https://querionnguyenthuha.id.vn/v1/student/apps/df5ec9aa-5c9b-476a-9810-5eaf9a94fa7a/chat 2>&1

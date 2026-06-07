@@ -389,7 +389,8 @@ async def student_app_chat(
                     history=history,
                     app_system_prompt=app.system_prompt or None,
                     inputs={
-                        "student_id": str(student.id),
+                        "student_id": student.student_id or str(student.id),
+                        "student_uuid": str(student.id),
                         "student_name": student.name,
                         "student_email": student.email,
                     },

@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.deps import get_db
 from app.models.app import App
 from app.models.survey import SurveyCompletion
+from app.models.student import Student
 
 
 router = APIRouter(prefix="/v1/survey", tags=["survey"])
@@ -68,6 +69,11 @@ async def submit_survey(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid student_id format")
 
+    student_result = await db.execute(select(Student).where(Student.id == student_uuid))
+    student = student_result.scalar_one_or_none()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
     # Check if already completed
     existing = await db.execute(
         select(SurveyCompletion).where(
@@ -107,10 +113,11 @@ async def submit_survey(
     if service_account and sheet_id:
         from app.services.google_sheets import check_and_submit_survey
         try:
+            # Pass the actual MSV (student.student_id) to the Google Sheet instead of internal UUID
             await check_and_submit_survey(
                 service_account=service_account,
                 sheet_id=sheet_id,
-                student_id=body.student_id,
+                student_id=student.student_id or str(student_uuid),
                 row_data=response_data,
                 sheet_name=sheet_name,
             )
