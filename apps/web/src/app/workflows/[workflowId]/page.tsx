@@ -41,17 +41,17 @@ import { listDatasets } from "@/lib/api/datasets";
    ═══════════════════════════════════════════ */
 
 const NODE_STYLES: Record<string, { color: string; bg: string; icon: string; label: string }> = {
-  input:             { color: "#22c55e", bg: "rgba(34,197,94,0.10)",  icon: "▶",  label: "Start" },
-  retrieve:          { color: "#3b82f6", bg: "rgba(59,130,246,0.10)",  icon: "🔍", label: "Knowledge Retrieval" },
-  compose_prompt:    { color: "#f59e0b", bg: "rgba(245,158,11,0.10)", icon: "📝", label: "Compose Prompt" },
-  llm_generate:      { color: "#a855f7", bg: "rgba(168,85,247,0.10)", icon: "🤖", label: "LLM" },
+  input: { color: "#22c55e", bg: "rgba(34,197,94,0.10)", icon: "▶", label: "Start" },
+  retrieve: { color: "#3b82f6", bg: "rgba(59,130,246,0.10)", icon: "🔍", label: "Knowledge Retrieval" },
+  compose_prompt: { color: "#f59e0b", bg: "rgba(245,158,11,0.10)", icon: "📝", label: "Compose Prompt" },
+  llm_generate: { color: "#a855f7", bg: "rgba(168,85,247,0.10)", icon: "🤖", label: "LLM" },
   parameter_extract: { color: "#14b8a6", bg: "rgba(20,184,166,0.10)", icon: "📋", label: "Parameter Extract" },
-  http_request:      { color: "#f97316", bg: "rgba(249,115,22,0.10)", icon: "🌐", label: "HTTP Request" },
-  google_sheets:     { color: "#16a34a", bg: "rgba(22,163,74,0.10)",  icon: "📊", label: "Google Sheets" },
-  code_execute:      { color: "#6366f1", bg: "rgba(99,102,241,0.10)", icon: "⚡", label: "Code Execute" },
-  if_else:           { color: "#6b7280", bg: "rgba(107,114,128,0.10)", icon: "🔀", label: "If / Else" },
-  answer:            { color: "#ec4899", bg: "rgba(236,72,153,0.10)", icon: "💬", label: "Answer" },
-  output:            { color: "#ef4444", bg: "rgba(239,68,68,0.10)",  icon: "⏹",  label: "End" },
+  http_request: { color: "#f97316", bg: "rgba(249,115,22,0.10)", icon: "🌐", label: "HTTP Request" },
+  google_sheets: { color: "#16a34a", bg: "rgba(22,163,74,0.10)", icon: "📊", label: "Google Sheets" },
+  code_execute: { color: "#6366f1", bg: "rgba(99,102,241,0.10)", icon: "⚡", label: "Code Execute" },
+  if_else: { color: "#6b7280", bg: "rgba(107,114,128,0.10)", icon: "🔀", label: "If / Else" },
+  answer: { color: "#ec4899", bg: "rgba(236,72,153,0.10)", icon: "💬", label: "Answer" },
+  output: { color: "#ef4444", bg: "rgba(239,68,68,0.10)", icon: "⏹", label: "End" },
 };
 
 /* ═══════════════════════════════════════════
@@ -170,7 +170,7 @@ function WorkflowCanvasInner() {
     })();
   }, [workflowId]); // eslint-disable-line
 
-  useEffect(() => { listDatasets().then(setDatasets).catch(() => {}); }, []);
+  useEffect(() => { listDatasets().then(setDatasets).catch(() => { }); }, []);
 
   const onConnect = useCallback((c: Connection) => {
     const isIfElseFalse = c.sourceHandle === "false";
@@ -259,8 +259,10 @@ function WorkflowCanvasInner() {
             </svg>
           </div>
           <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full"
-            style={{ background: workflowType === "chatflow" ? "rgba(236,72,153,0.12)" : "rgba(168,85,247,0.12)",
-                     color: workflowType === "chatflow" ? "#ec4899" : "#a855f7" }}>
+            style={{
+              background: workflowType === "chatflow" ? "rgba(236,72,153,0.12)" : "rgba(168,85,247,0.12)",
+              color: workflowType === "chatflow" ? "#ec4899" : "#a855f7"
+            }}>
             {workflowType}
           </span>
         </div>
@@ -382,7 +384,7 @@ function WorkflowCanvasInner() {
             {selectedNode.type === "parameter_extract" && (
               <Field label="Schema (JSON: field → description)">
                 <textarea value={JSON.stringify(selectedNode.data?.schema || {}, null, 2)}
-                  onChange={(e) => { try { updateNodeData("schema", JSON.parse(e.target.value)); } catch {} }}
+                  onChange={(e) => { try { updateNodeData("schema", JSON.parse(e.target.value)); } catch { } }}
                   rows={6} className="w-full text-xs rounded-lg px-3 py-2 outline-none resize-y font-mono"
                   style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }} />
               </Field>
@@ -523,7 +525,7 @@ function WorkflowCanvasInner() {
                       style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }} />
                   </Field>
                   <div className="rounded-lg p-2 text-[10px]" style={{ background: "rgba(20,184,166,0.06)", color: "#14b8a6", border: "1px solid rgba(20,184,166,0.2)" }}>
-                    Output: <code>google_sheets_found</code> = &quot;true&quot; / &quot;false&quot;<br/>
+                    Output: <code>google_sheets_found</code> = &quot;true&quot; / &quot;false&quot;<br />
                     → dùng trong <strong>if_else</strong>: variable = <code>google_sheets_found</code>, operator = equals, value = true
                   </div>
                 </>)}
@@ -533,7 +535,7 @@ function WorkflowCanvasInner() {
                   <Field label="Row Mapping (JSON: header → value)">
                     <textarea
                       value={JSON.stringify(selectedNode.data?.row_mapping || {}, null, 2)}
-                      onChange={(e) => { try { updateNodeData("row_mapping", JSON.parse(e.target.value)); } catch {} }}
+                      onChange={(e) => { try { updateNodeData("row_mapping", JSON.parse(e.target.value)); } catch { } }}
                       rows={8} className="w-full text-xs rounded-lg px-3 py-2 outline-none resize-y font-mono"
                       style={{ background: "var(--background)", color: "var(--foreground)", border: "1px solid var(--border)" }} />
                   </Field>
@@ -547,10 +549,10 @@ function WorkflowCanvasInner() {
             {/* Delete */}
             <div style={{ marginTop: "auto", paddingTop: 12 }}>
               <button onClick={() => {
-                  setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
-                  setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
-                  setSelectedNode(null);
-                }}
+                setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
+                setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
+                setSelectedNode(null);
+              }}
                 className="w-full text-xs rounded-lg px-3 py-2 font-medium"
                 style={{ background: "rgba(239,68,68,0.08)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.15)" }}>
                 Delete Node

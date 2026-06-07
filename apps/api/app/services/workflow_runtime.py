@@ -116,22 +116,28 @@ async def run_workflow(
         elif node_type == "if_else" and len(outgoing) >= 2:
             # If/else: pick branch based on condition result
             branch = state.get("_branch", "true")
-            # Convention: first edge = true, second edge = false
-            # Or use sourceHandle: "true"/"false"
+
+            # ── Use sourceHandle ("true"/"false") set by React Flow canvas ─
             true_edge = None
             false_edge = None
             for edge in outgoing:
-                handle = edge.get("sourceHandle", "")
-                if handle == "false" or edge == outgoing[-1]:
+                handle = str(edge.get("sourceHandle", "")).lower()
+                if handle == "false":
                     false_edge = edge
-                else:
+                elif handle == "true":
                     true_edge = edge
-            if len(outgoing) == 2:
+
+            # Fallback: sourceHandle not set → use draw order (0=true, 1=false)
+            if true_edge is None and false_edge is None:
                 true_edge = outgoing[0]
                 false_edge = outgoing[1]
+            elif true_edge is None:
+                true_edge = next(e for e in outgoing if e is not false_edge)
+            elif false_edge is None:
+                false_edge = next(e for e in outgoing if e is not true_edge)
 
             chosen = true_edge["target"] if branch == "true" else false_edge["target"]
-            print(f"[WORKFLOW]   if_else branch={branch!r} → {chosen!r}")
+            print(f"[WORKFLOW]   if_else branch={branch!r} sourceHandles={[e.get('sourceHandle') for e in outgoing]} → {chosen!r}")
             current_id = chosen
         else:
             current_id = outgoing[0]["target"]
@@ -280,6 +286,22 @@ If a field cannot be determined from the conversation, use null.
                 clean = re.sub(r"```json?\s*", "", raw)
                 clean = re.sub(r"```\s*$", "", clean).strip()
                 extracted = json.loads(clean)
+
+                # ── Fix 1: Carry over previously extracted non-null values ──
+                # Prevents losing mon_hoc when user replies with MSSV only
+                prev_params = state.get("extracted_params", {})
+                for key, val in prev_params.items():
+                    if val is not None and val != "" and not extracted.get(key):
+                        extracted[key] = val
+
+                # ── Fix 2: Heuristic — bare number → treat as mssv ──────────
+                # When user types only digits (e.g. "22110045"), LLM often
+                # fails to recognize it as MSSV without explicit label.
+                current_query = state.get("query", "").strip()
+                if re.match(r"^\d{7,10}$", current_query) and not extracted.get("mssv"):
+                    extracted["mssv"] = current_query
+                    print(f"[parameter_extract] Auto-detected MSSV from bare number: {current_query!r}")
+
                 state["extracted_params"] = extracted
             except json.JSONDecodeError:
                 state["extracted_params"] = {"_raw": raw}
