@@ -167,3 +167,34 @@ async def delete_workspace(
     await db.execute(sql_delete(Workspace).where(Workspace.id == ws_uuid))
     await db.commit()
     return {"detail": "Workspace deleted"}
+
+
+@router.get("/{workspace_id}/available-users")
+async def list_available_users(
+    workspace_id: str,
+    ws_ctx: WorkspaceContext = Depends(get_workspace_context),
+    db: AsyncSession = Depends(get_db),
+):
+    """List admin users not yet in this workspace (for invite dropdown). Owner or super_admin."""
+    from app.routers.members import _require_manage_permission
+    _require_manage_permission(ws_ctx)
+
+    ws_uuid = uuid.UUID(workspace_id)
+
+    # Get IDs of current members
+    members_result = await db.execute(
+        select(UserWorkspace.user_id).where(UserWorkspace.workspace_id == ws_uuid)
+    )
+    member_ids = {row[0] for row in members_result.all()}
+
+    # Get all admin users not in workspace
+    result = await db.execute(
+        select(User).where(User.role == UserRole.admin).order_by(User.name)
+    )
+    users = result.scalars().all()
+
+    return [
+        {"id": str(u.id), "email": u.email, "name": u.name}
+        for u in users
+        if u.id not in member_ids
+    ]

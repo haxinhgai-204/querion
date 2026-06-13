@@ -9,6 +9,8 @@ import { useI18n } from "@/components/providers/I18nProvider";
 function getPageTitleKey(pathname: string): string {
   if (pathname.startsWith("/admin/users")) return "Users";
   if (pathname.startsWith("/admin/workspaces")) return "Workspaces";
+  if (pathname.startsWith("/admin/settings")) return "Settings";
+  if (pathname.startsWith("/admin/students")) return "Students";
   const segments = pathname.split("/").filter(Boolean);
   if (segments.length === 0) return "nav.datasets";
   return `nav.${segments[0]}`;

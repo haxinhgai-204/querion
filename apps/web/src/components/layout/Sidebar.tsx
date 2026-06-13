@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/components/providers/I18nProvider";
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useAuth, usePermission } from "@/components/providers/AuthProvider";
 
 const navItems = [
   {
@@ -104,6 +104,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { t } = useI18n();
   const { isSuper, logout, user } = useAuth();
+  const { canManageMembers } = usePermission();
 
   return (
     <aside
@@ -154,7 +155,7 @@ export default function Sidebar() {
           })}
         </ul>
 
-        {/* Admin section */}
+        {/* Admin section — Super Admin only */}
         {isSuper && (
           <>
             <div className="mt-6 mb-2 px-3">
@@ -164,6 +165,52 @@ export default function Sidebar() {
             </div>
             <ul className="flex flex-col gap-1">
               {adminItems.map((item) => {
+                const isActive = pathname.startsWith(item.href);
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200"
+                      style={{
+                        color: isActive ? "var(--accent-hover)" : "var(--muted)",
+                        background: isActive ? "var(--accent-glow)" : "transparent",
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isActive) { e.currentTarget.style.color = "var(--foreground)"; e.currentTarget.style.background = "var(--card-hover)"; }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isActive) { e.currentTarget.style.color = "var(--muted)"; e.currentTarget.style.background = "transparent"; }
+                      }}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
+        )}
+
+        {/* Settings — visible to Workspace Owner (non-super) */}
+        {!isSuper && canManageMembers && (
+          <>
+            <div className="mt-6 mb-2 px-3">
+              <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: "var(--muted)" }}>
+                Workspace
+              </span>
+            </div>
+            <ul className="flex flex-col gap-1">
+              {[{
+                label: "Settings",
+                href: "/admin/settings",
+                icon: (
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <circle cx="10" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M10 2V4M10 16V18M2 10H4M16 10H18M4.22 4.22L5.64 5.64M14.36 14.36L15.78 15.78M4.22 15.78L5.64 14.36M14.36 5.64L15.78 4.22" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                ),
+              }].map((item) => {
                 const isActive = pathname.startsWith(item.href);
                 return (
                   <li key={item.href}>

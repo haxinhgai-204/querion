@@ -55,10 +55,10 @@ export default function MembersPanel() {
   };
 
   const fetchUsers = async () => {
-    if (!isSuper) return;
+    if (!wsId) return;
     try {
-      const data = await api.get<UserOption[]>("/v1/users");
-      setUsers(data.filter((u) => !members.some((m) => m.user_id === u.id)));
+      const data = await api.get<UserOption[]>(`/v1/workspaces/${wsId}/available-users`);
+      setUsers(data);
     } catch {}
   };
 
