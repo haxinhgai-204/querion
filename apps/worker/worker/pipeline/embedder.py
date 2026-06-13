@@ -8,6 +8,12 @@ from worker.config import ENCRYPTION_KEY
 # pgvector column is vector(1536) — all embeddings must be this size
 TARGET_DIM = 1536
 
+# Base URLs for OpenAI-compatible proxy providers
+_PROVIDER_URLS = {
+    "openrouter": "https://openrouter.ai/api/v1",
+    "vilao": "https://api.vilao.ai/v1",
+}
+
 
 def _decrypt(ciphertext: str) -> str:
     """Decrypt API key using Fernet."""
@@ -39,19 +45,26 @@ def embed_texts(
 
     if provider_name == "google":
         raw = _embed_google(texts, api_key, model_name, batch_size)
-    elif provider_name == "openrouter":
-        raw = _embed_openrouter(texts, api_key, model_name, batch_size)
+    elif provider_name in _PROVIDER_URLS:
+        # OpenAI-compatible proxy (openrouter, vilao, etc.)
+        raw = _embed_openai_compat(texts, api_key, model_name, batch_size,
+                                   base_url=_PROVIDER_URLS[provider_name])
     else:
-        raw = _embed_openai(texts, api_key, model_name, batch_size)
+        # Direct OpenAI
+        raw = _embed_openai_compat(texts, api_key, model_name, batch_size)
 
     return _pad_to_target(raw)
 
 
-def _embed_openai(
-    texts: list[str], api_key: str, model_name: str, batch_size: int
+def _embed_openai_compat(
+    texts: list[str], api_key: str, model_name: str, batch_size: int,
+    base_url: str | None = None,
 ) -> list[list[float]]:
-    """Embed using OpenAI API."""
-    client = openai.OpenAI(api_key=api_key)
+    """Embed using OpenAI-compatible API (also covers OpenRouter, Vilao)."""
+    kwargs = {"api_key": api_key}
+    if base_url:
+        kwargs["base_url"] = base_url
+    client = openai.OpenAI(**kwargs)
     all_embeddings: list[list[float]] = []
 
     for i in range(0, len(texts), batch_size):
@@ -83,21 +96,5 @@ def _embed_google(
             contents=batch,
         )
         all_embeddings.extend([e.values for e in result.embeddings])
-
-    return all_embeddings
-
-
-def _embed_openrouter(
-    texts: list[str], api_key: str, model_name: str, batch_size: int
-) -> list[list[float]]:
-    """Embed using OpenRouter API (OpenAI-compatible with custom base_url)."""
-    client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
-    all_embeddings: list[list[float]] = []
-
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i : i + batch_size]
-        response = client.embeddings.create(input=batch, model=model_name)
-        batch_embeddings = [item.embedding for item in response.data]
-        all_embeddings.extend(batch_embeddings)
 
     return all_embeddings

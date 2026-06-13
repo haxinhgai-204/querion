@@ -406,7 +406,7 @@ async def admin_app_chat(
                 yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
         else:
             if app.dataset_id:
-                sources = await retrieve(db=db, query=body.message, dataset_ids=[app.dataset_id], top_k=5)
+                sources = await retrieve(db=db, query=body.message, dataset_ids=[app.dataset_id], top_k=15)
                 if sources:
                     yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
 
@@ -430,9 +430,10 @@ async def admin_app_chat(
             api_key = decrypt_key(provider.api_key_encrypted)
 
             try:
-                from app.services.chat import _stream_openai, OPENROUTER_BASE_URL, _stream_google, _stream_anthropic
-                if provider.provider_name == "openrouter":
-                    async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=OPENROUTER_BASE_URL):
+                from app.services.chat import _stream_openai, _stream_google, _stream_anthropic, PROVIDER_BASE_URLS
+                base_url = PROVIDER_BASE_URLS.get(provider.provider_name)
+                if base_url:  # openrouter, vilao, etc.
+                    async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=base_url):
                         yield chunk
                         try:
                             data = json.loads(chunk[6:])

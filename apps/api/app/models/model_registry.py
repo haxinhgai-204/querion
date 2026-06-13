@@ -81,10 +81,24 @@ MODELS = [
     {"provider": "openrouter", "model": "qwen/qwen3-32b", "purpose": "llm", "dimensions": None, "label": "Qwen3 32B"},
     {"provider": "openrouter", "model": "qwen/qwen3-8b", "purpose": "llm", "dimensions": None, "label": "Qwen3 8B"},
     {"provider": "openrouter", "model": "qwen/qwq-32b", "purpose": "llm", "dimensions": None, "label": "QwQ 32B (Reasoning)"},
+
+    # ============================================================
+    # Vilao.ai — OpenAI-compatible proxy (https://api.vilao.ai/v1)
+    # ============================================================
+    # -- Embedding --
+    {"provider": "vilao", "model": "tse/text-embedding-3-small", "purpose": "embedding", "dimensions": 1536, "label": "Text Embedding 3 Small (Vilao)"},
+    {"provider": "vilao", "model": "dg/text-embedding-3-large", "purpose": "embedding", "dimensions": 1536, "label": "Text Embedding 3 Large (Vilao)"},
+
+    # -- LLM --
+    {"provider": "vilao", "model": "gx/gpt-5.4", "purpose": "llm", "dimensions": None, "label": "GPT-5.4 (Vilao)"},
+    {"provider": "vilao", "model": "ts/gemini-2.5-flash-lite", "purpose": "llm", "dimensions": None, "label": "Gemini 2.5 Flash Lite (Vilao)"},
+    {"provider": "vilao", "model": "gemini-3.5-flash-low", "purpose": "llm", "dimensions": None, "label": "Gemini 3.5 Flash Low (Vilao)"},
+
 ]
 
 PROVIDERS = [
     {"value": "openrouter", "label": "OpenRouter"},
+    {"value": "vilao", "label": "Vilao.ai"},
     {"value": "openai", "label": "OpenAI"},
     {"value": "google", "label": "Google Gemini"},
     {"value": "anthropic", "label": "Anthropic"},

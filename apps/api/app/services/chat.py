@@ -2,7 +2,14 @@
 
 import json
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+# Base URLs for OpenAI-compatible proxy providers
+PROVIDER_BASE_URLS = {
+    "openrouter": "https://openrouter.ai/api/v1",
+    "vilao": "https://api.vilao.ai/v1",
+}
+# Keep legacy constant for backward compat
+OPENROUTER_BASE_URL = PROVIDER_BASE_URLS["openrouter"]
 from uuid import UUID
 from typing import AsyncGenerator
 
@@ -90,8 +97,9 @@ async def chat_stream(
     api_key = decrypt_key(provider.api_key_encrypted)
 
     try:
-        if provider.provider_name == "openrouter":
-            async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=OPENROUTER_BASE_URL):
+        base_url = PROVIDER_BASE_URLS.get(provider.provider_name)
+        if base_url:  # openrouter, vilao, etc.
+            async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=base_url):
                 yield chunk
         elif provider.provider_name == "google":
             async for chunk in _stream_google(api_key, provider.model_name, messages):
@@ -99,7 +107,7 @@ async def chat_stream(
         elif provider.provider_name == "anthropic":
             async for chunk in _stream_anthropic(api_key, provider.model_name, messages):
                 yield chunk
-        else:  # openai
+        else:  # openai direct
             async for chunk in _stream_openai(api_key, provider.model_name, messages):
                 yield chunk
     except Exception as e:
@@ -122,6 +130,7 @@ async def _stream_openai(
         model=model,
         messages=messages,
         stream=True,
+        max_tokens=4096,
     )
     async for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:
@@ -215,9 +224,10 @@ async def generate_title(db: AsyncSession, user_message: str, assistant_response
 User message: {user_message[:300]}"""
 
     try:
-        if provider.provider_name == "openrouter":
+        base_url = PROVIDER_BASE_URLS.get(provider.provider_name)
+        if base_url:  # openrouter, vilao, etc.
             import openai
-            client = openai.AsyncOpenAI(api_key=api_key, base_url=OPENROUTER_BASE_URL)
+            client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
             result = await client.chat.completions.create(
                 model=provider.model_name, max_tokens=50,
                 messages=[{"role": "user", "content": prompt}],

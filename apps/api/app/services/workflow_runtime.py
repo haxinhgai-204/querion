@@ -230,7 +230,8 @@ async def _execute_node(
             return
 
         api_key = decrypt_key(provider.api_key_encrypted)
-        model = node_data.get("model") or provider.model_name
+        # Always use the currently active global model (ignore stale models saved in the workflow JSON)
+        model = provider.model_name
         temperature = node_data.get("temperature", 0.7)
         max_tokens = node_data.get("max_tokens", 4096)
         messages = state["prompt_messages"] or [{"role": "user", "content": state["query"]}]
@@ -274,18 +275,21 @@ If a field cannot be determined from the conversation, use null.
         provider = await get_active_llm_provider(db)
         if provider:
             api_key = decrypt_key(provider.api_key_encrypted)
+            print(f"[parameter_extract] Calling LLM provider={provider.provider_name} model={provider.model_name}")
             raw = await _call_llm(
                 provider_name=provider.provider_name,
                 api_key=api_key, model=provider.model_name,
                 messages=extract_messages,
                 temperature=0.0, max_tokens=1024,
             )
+            print(f"[parameter_extract] Raw LLM response ({len(raw) if raw else 0} chars): {raw[:200]!r}")
             # Parse JSON from response
             try:
                 # Strip markdown code fences if present
                 clean = re.sub(r"```json?\s*", "", raw)
                 clean = re.sub(r"```\s*$", "", clean).strip()
                 extracted = json.loads(clean)
+                print(f"[parameter_extract] Parsed OK: {extracted}")
 
                 # ── Fix 1: Carry over previously extracted non-null values ──
                 # Prevents losing mon_hoc when user replies with MSSV only
@@ -303,8 +307,12 @@ If a field cannot be determined from the conversation, use null.
                     print(f"[parameter_extract] Auto-detected MSSV from bare number: {current_query!r}")
 
                 state["extracted_params"] = extracted
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
+                print(f"[parameter_extract] JSON parse FAILED: {exc}")
+                print(f"[parameter_extract] Clean text was: {clean[:300]!r}")
                 state["extracted_params"] = {"_raw": raw}
+        else:
+            print(f"[parameter_extract] No active LLM provider found!")
 
     elif node_type == "http_request":
         # Call external API
@@ -593,72 +601,93 @@ async def _call_llm(
     temperature: float = 0.7,
     max_tokens: int = 4096,
 ) -> str:
-    """Call LLM (non-streaming) and return full response text."""
-    if provider_name == "openrouter":
-        import openai
-        client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
-        result = client.chat.completions.create(
-            model=model, max_tokens=max_tokens, temperature=temperature,
-            messages=messages,
-        )
-        if not result.choices:
-            return ""
-        content = result.choices[0].message.content
-        return content or ""  # normalize None → ""
+    """Call LLM (non-streaming) and return full response text.
+
+    All sync SDK calls are wrapped in asyncio.to_thread() to avoid
+    blocking the FastAPI event loop.
+    """
+    import asyncio
+
+    # Base URLs for OpenAI-compatible proxy providers
+    _PROVIDER_URLS = {
+        "openrouter": "https://openrouter.ai/api/v1",
+        "vilao": "https://api.vilao.ai/v1",
+    }
+
+    if provider_name in _PROVIDER_URLS:
+        _base_url = _PROVIDER_URLS[provider_name]
+        def _sync_call():
+            import openai
+            client = openai.OpenAI(api_key=api_key, base_url=_base_url)
+            result = client.chat.completions.create(
+                model=model, max_tokens=max_tokens, temperature=temperature,
+                messages=messages,
+            )
+            if not result.choices:
+                return ""
+            content = result.choices[0].message.content
+            return content or ""  # normalize None → ""
+        return await asyncio.to_thread(_sync_call)
 
     elif provider_name == "google":
-        from google import genai
-        from google.genai.types import Content, Part
+        def _sync_call():
+            from google import genai
+            from google.genai.types import Content, Part
 
-        client = genai.Client(api_key=api_key)
-        system_instruction = None
-        contents = []
-        for msg in messages:
-            if msg["role"] == "system":
-                system_instruction = msg["content"]
-            else:
-                role = "model" if msg["role"] == "assistant" else "user"
-                contents.append(Content(role=role, parts=[Part(text=msg["content"])]))
+            client = genai.Client(api_key=api_key)
+            system_instruction = None
+            contents = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_instruction = msg["content"]
+                else:
+                    role = "model" if msg["role"] == "assistant" else "user"
+                    contents.append(Content(role=role, parts=[Part(text=msg["content"])]))
 
-        result = client.models.generate_content(
-            model=model if model.startswith("models/") else f"models/{model}",
-            contents=contents,
-            config={
-                "system_instruction": system_instruction,
-                "temperature": temperature,
-                "max_output_tokens": max_tokens,
-            } if system_instruction else {
-                "temperature": temperature,
-                "max_output_tokens": max_tokens,
-            },
-        )
-        return result.text or ""
+            result = client.models.generate_content(
+                model=model if model.startswith("models/") else f"models/{model}",
+                contents=contents,
+                config={
+                    "system_instruction": system_instruction,
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens,
+                } if system_instruction else {
+                    "temperature": temperature,
+                    "max_output_tokens": max_tokens,
+                },
+            )
+            return result.text or ""
+        return await asyncio.to_thread(_sync_call)
 
     elif provider_name == "anthropic":
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        system = ""
-        chat_msgs = []
-        for msg in messages:
-            if msg["role"] == "system":
-                system = msg["content"]
-            else:
-                chat_msgs.append({"role": msg["role"], "content": msg["content"]})
+        def _sync_call():
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            system = ""
+            chat_msgs = []
+            for msg in messages:
+                if msg["role"] == "system":
+                    system = msg["content"]
+                else:
+                    chat_msgs.append({"role": msg["role"], "content": msg["content"]})
 
-        result = client.messages.create(
-            model=model, max_tokens=max_tokens, temperature=temperature,
-            system=system, messages=chat_msgs,
-        )
-        return result.content[0].text if result.content else ""
+            result = client.messages.create(
+                model=model, max_tokens=max_tokens, temperature=temperature,
+                system=system, messages=chat_msgs,
+            )
+            return result.content[0].text if result.content else ""
+        return await asyncio.to_thread(_sync_call)
 
     else:  # openai direct
-        import openai
-        client = openai.OpenAI(api_key=api_key)
-        result = client.chat.completions.create(
-            model=model, max_tokens=max_tokens, temperature=temperature,
-            messages=messages,
-        )
-        if not result.choices:
-            return ""
-        content = result.choices[0].message.content
-        return content or ""  # normalize None → ""
+        def _sync_call():
+            import openai
+            client = openai.OpenAI(api_key=api_key)
+            result = client.chat.completions.create(
+                model=model, max_tokens=max_tokens, temperature=temperature,
+                messages=messages,
+            )
+            if not result.choices:
+                return ""
+            content = result.choices[0].message.content
+            return content or ""  # normalize None → ""
+        return await asyncio.to_thread(_sync_call)

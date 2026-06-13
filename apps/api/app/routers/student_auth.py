@@ -418,7 +418,7 @@ async def student_app_chat(
         else:
             # RAG retrieval only if dataset is bound
             if app.dataset_id:
-                sources = await retrieve(db=db, query=body.message, dataset_ids=[app.dataset_id], top_k=5)
+                sources = await retrieve(db=db, query=body.message, dataset_ids=[app.dataset_id], top_k=15)
                 yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
 
             provider = await get_active_llm_provider(db)
@@ -442,9 +442,10 @@ async def student_app_chat(
             api_key = decrypt_key(provider.api_key_encrypted)
 
             try:
-                if provider.provider_name == "openrouter":
-                    from app.services.chat import _stream_openai, OPENROUTER_BASE_URL
-                    async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=OPENROUTER_BASE_URL):
+                from app.services.chat import _stream_openai, _stream_google, _stream_anthropic, PROVIDER_BASE_URLS
+                base_url = PROVIDER_BASE_URLS.get(provider.provider_name)
+                if base_url:  # openrouter, vilao, etc.
+                    async for chunk in _stream_openai(api_key, provider.model_name, messages, base_url=base_url):
                         yield chunk
                         if "token" in chunk:
                             try:
@@ -454,7 +455,6 @@ async def student_app_chat(
                             except:
                                 pass
                 elif provider.provider_name == "google":
-                    from app.services.chat import _stream_google
                     async for chunk in _stream_google(api_key, provider.model_name, messages):
                         yield chunk
                         if "token" in chunk:
@@ -465,7 +465,6 @@ async def student_app_chat(
                             except:
                                 pass
                 elif provider.provider_name == "anthropic":
-                    from app.services.chat import _stream_anthropic
                     async for chunk in _stream_anthropic(api_key, provider.model_name, messages):
                         yield chunk
                         if "token" in chunk:
@@ -476,7 +475,6 @@ async def student_app_chat(
                             except:
                                 pass
                 else:  # openai direct
-                    from app.services.chat import _stream_openai
                     async for chunk in _stream_openai(api_key, provider.model_name, messages):
                         yield chunk
                         if "token" in chunk:
