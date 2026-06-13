@@ -1,10 +1,11 @@
 "use client";
 
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useAuth, usePermission } from "@/components/providers/AuthProvider";
 import { useI18n } from "@/components/providers/I18nProvider";
 import { api } from "@/lib/api";
 import { useEffect, useState } from "react";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import MembersPanel from "@/components/workspace/MembersPanel";
 
 interface ProviderItem {
   id: string;
@@ -42,7 +43,9 @@ const PURPOSE_COLORS: Record<string, { bg: string; color: string }> = {
 
 export default function AdminSettingsPage() {
   const { isSuper } = useAuth();
+  const { canManageMembers } = usePermission();
   const { t } = useI18n();
+  const [activeTab, setActiveTab] = useState<"providers" | "members">(isSuper ? "providers" : "members");
   const [providers, setProviders] = useState<ProviderItem[]>([]);
   const [allModels, setAllModels] = useState<ModelDef[]>([]);
   const [providerDefs, setProviderDefs] = useState<ProviderDef[]>([]);
@@ -122,21 +125,68 @@ export default function AdminSettingsPage() {
     }
   };
 
-  if (!isSuper) {
+  // Members tab is accessible to workspace owners; AI Providers tab is super-admin only
+  if (!isSuper && !canManageMembers) {
     return (
       <div className="flex items-center justify-center h-64">
-        <p style={{ color: "var(--muted)" }}>Access denied. Super admin only.</p>
+        <p style={{ color: "var(--muted)" }}>Access denied.</p>
       </div>
     );
   }
 
   return (
     <div>
-      <div className="page-header flex items-center justify-between mb-6">
+      {/* Page Header */}
+      <div className="page-header mb-6">
+        <h2 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>
+          Settings
+        </h2>
+        <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
+          Manage workspace members and AI providers
+        </p>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 p-1 rounded-xl" style={{ background: "var(--card)", border: "1px solid var(--border)", width: "fit-content" }}>
+        {canManageMembers && (
+          <button
+            onClick={() => setActiveTab("members")}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+            style={{
+              background: activeTab === "members" ? "var(--accent)" : "transparent",
+              color: activeTab === "members" ? "#fff" : "var(--muted)",
+            }}
+          >
+            👥 Members
+          </button>
+        )}
+        {isSuper && (
+          <button
+            onClick={() => setActiveTab("providers")}
+            className="px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150"
+            style={{
+              background: activeTab === "providers" ? "var(--accent)" : "transparent",
+              color: activeTab === "providers" ? "#fff" : "var(--muted)",
+            }}
+          >
+            🤖 AI Providers
+          </button>
+        )}
+      </div>
+
+      {/* Members Tab */}
+      {activeTab === "members" && canManageMembers && (
+        <MembersPanel />
+      )}
+
+      {/* AI Providers Tab */}
+      {activeTab === "providers" && isSuper && (
+      <div>
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-semibold" style={{ color: "var(--foreground)" }}>
+          <h3 className="text-lg font-semibold" style={{ color: "var(--foreground)" }}>
             AI Providers
-          </h2>
+          </h3>
           <p className="text-sm mt-1" style={{ color: "var(--muted)" }}>
             Manage API keys for embedding and LLM models
           </p>
@@ -359,6 +409,8 @@ export default function AdminSettingsPage() {
         onConfirm={handleDeleteConfirmed}
         onCancel={() => setDeleteTarget(null)}
       />
+      </div>
+      )}
     </div>
   );
 }

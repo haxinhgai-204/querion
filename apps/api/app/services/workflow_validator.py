@@ -4,7 +4,7 @@ from typing import Any
 
 ALLOWED_NODE_TYPES = {
     "input", "retrieve", "compose_prompt", "llm_generate", "output",
-    "parameter_extract", "http_request", "if_else", "answer", "code_execute",
+    "parameter_extract", "http_request", "if_else", "answer", "code_execute", 
     "google_sheets",
 }
 
@@ -48,7 +48,7 @@ def validate_graph(graph_json: dict[str, Any]) -> None:
         node_types[nid] = ntype
 
     # Exactly 1 input and 1 output
-    input_nodes = [n for n in nodes if n["type"] == "input"]
+    input_nodes = [n for n in nodes if n["type"] == "input"] 
     output_nodes = [n for n in nodes if n["type"] == "output"]
 
     if len(input_nodes) != 1:

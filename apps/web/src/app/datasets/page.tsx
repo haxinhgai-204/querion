@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/components/providers/I18nProvider";
+import { usePermission } from "@/components/providers/AuthProvider";
 import {
   listDatasets,
   createDataset,
@@ -17,12 +18,14 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 export default function DatasetsPage() {
   const { t } = useI18n();
   const router = useRouter();
+  const { canEdit } = usePermission();
   const [datasets, setDatasets] = useState<DatasetResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteUsage, setDeleteUsage] = useState<DatasetUsageResponse | null>(null);
   const [checkingUsage, setCheckingUsage] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   const fetchDatasets = useCallback(async () => {//lấy danh sách dts
     try {
@@ -60,10 +63,17 @@ export default function DatasetsPage() {
 
   const handleDeleteConfirmed = async () => {
     if (!deleteTarget) return;
-    await deleteDataset(deleteTarget);
-    setDeleteTarget(null);
-    setDeleteUsage(null);
-    await fetchDatasets();
+    try {
+      await deleteDataset(deleteTarget);
+      setDeleteTarget(null);
+      setDeleteUsage(null);
+      setDeleteError("");
+      await fetchDatasets();
+    } catch (err: any) {
+      setDeleteTarget(null);
+      setDeleteUsage(null);
+      setDeleteError(err.message || "Failed to delete dataset");
+    }
   };
 
   const handleDeleteCancel = () => {
@@ -125,19 +135,21 @@ export default function DatasetsPage() {
             {t("description", "datasets")}
           </p>
         </div>
-        <button
-          id="btn-create-dataset"
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-all duration-200"
-          style={{ background: "var(--accent)" }}
-          onMouseOver={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
-          onMouseOut={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-          {t("createDataset", "datasets")}
-        </button>
+        {canEdit && (
+          <button
+            id="btn-create-dataset"
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-all duration-200"
+            style={{ background: "var(--accent)" }}
+            onMouseOver={(e) => { e.currentTarget.style.background = "var(--accent-hover)"; }}
+            onMouseOut={(e) => { e.currentTarget.style.background = "var(--accent)"; }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 3V13M3 8H13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+            {t("createDataset", "datasets")}
+          </button>
+        )}
       </div>
 
       {datasets.length === 0 ? (
@@ -208,39 +220,41 @@ export default function DatasetsPage() {
                     {new Date(ds.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <button
-                      id={`btn-delete-dataset-${ds.id}`}
-                      onClick={(e) => handleDeleteClick(e, ds.id)}
-                      disabled={checkingUsage}
-                      className="rounded-lg p-1.5 transition-all duration-200"
-                      style={{ color: "var(--muted)" }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.color = "#ef4444";
-                        e.currentTarget.style.background = "rgba(239,68,68,0.1)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.color = "var(--muted)";
-                        e.currentTarget.style.background = "transparent";
-                      }}
-                    >
-                      {checkingUsage ? (
-                        <svg width="16" height="16" viewBox="0 0 16 16" className="animate-spin">
-                          <circle
-                            cx="8" cy="8" r="6"
-                            stroke="currentColor" strokeWidth="1.5"
-                            strokeDasharray="30" strokeDashoffset="10"
-                            fill="none"
-                          />
-                        </svg>
-                      ) : (
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                          <path
-                            d="M3 4H13M5.5 4V3C5.5 2.44772 5.94772 2 6.5 2H9.5C10.0523 2 10.5 2.44772 10.5 3V4M6.5 7V11M9.5 7V11M4 4L4.5 13C4.5 13.5523 4.94772 14 5.5 14H10.5C11.0523 14 11.5 13.5523 11.5 13L12 4"
-                            stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"
-                          />
-                        </svg>
-                      )}
-                    </button>
+                    {canEdit && (
+                      <button
+                        id={`btn-delete-dataset-${ds.id}`}
+                        onClick={(e) => handleDeleteClick(e, ds.id)}
+                        disabled={checkingUsage}
+                        className="rounded-lg p-1.5 transition-all duration-200"
+                        style={{ color: "var(--muted)" }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.color = "#ef4444";
+                          e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.color = "var(--muted)";
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        {checkingUsage ? (
+                          <svg width="16" height="16" viewBox="0 0 16 16" className="animate-spin">
+                            <circle
+                              cx="8" cy="8" r="6"
+                              stroke="currentColor" strokeWidth="1.5"
+                              strokeDasharray="30" strokeDashoffset="10"
+                              fill="none"
+                            />
+                          </svg>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                            <path
+                              d="M3 4H13M5.5 4V3C5.5 2.44772 5.94772 2 6.5 2H9.5C10.0523 2 10.5 2.44772 10.5 3V4M6.5 7V11M9.5 7V11M4 4L4.5 13C4.5 13.5523 4.94772 14 5.5 14H10.5C11.0523 14 11.5 13.5523 11.5 13L12 4"
+                              stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -268,6 +282,24 @@ export default function DatasetsPage() {
         onConfirm={handleDeleteConfirmed}
         onCancel={handleDeleteCancel}
       />
+
+      {deleteError && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.95)", color: "#fff", minWidth: 320, maxWidth: 480 }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="flex-shrink-0">
+            <circle cx="9" cy="9" r="8" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M9 5.5V9.5M9 12V12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+          <span className="flex-1">{deleteError}</span>
+          <button onClick={() => setDeleteError("")} className="opacity-70 hover:opacity-100 ml-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 3L11 11M3 11L11 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

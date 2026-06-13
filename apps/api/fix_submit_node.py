@@ -25,7 +25,7 @@ async def fix():
 
         nodes = graph.get("nodes", [])
 
-        # Find n_check credentials
+        # Find n_check credentials 
         n_check = next((n for n in nodes if n["id"] == "n_check"), None)
         n_submit = next((n for n in nodes if n["id"] == "n_submit"), None)
 

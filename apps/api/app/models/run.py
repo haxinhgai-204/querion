@@ -45,7 +45,7 @@ class Run(Base):
     )
 
     # Relationships
-    steps = relationship("RunStep", back_populates="run", cascade="all, delete-orphan", order_by="RunStep.started_at")
+    steps = relationship("RunStep", back_populates="run", cascade="all, delete-orphan", order_by="RunStep.started_at") # Cascade all, delete-orphan: nếu xóa run thì xóa luôn các step liên quan
 
     def __repr__(self) -> str:
         return f"<Run {self.id} status={self.status}>"

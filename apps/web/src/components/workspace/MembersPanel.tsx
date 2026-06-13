@@ -37,6 +37,7 @@ export default function MembersPanel() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteForm, setInviteForm] = useState({ user_id: "", ws_role: "viewer" });
   const [error, setError] = useState("");
+  const [removeError, setRemoveError] = useState("");
   const [removeTarget, setRemoveTarget] = useState<{ userId: string; name: string } | null>(null);
 
   const wsId = activeWorkspace?.workspace_id;
@@ -82,7 +83,7 @@ export default function MembersPanel() {
       await api.patch(`/v1/workspaces/${wsId}/members/${userId}`, { ws_role: newRole });
       fetchMembers();
     } catch (err: any) {
-      alert(err.message);
+      setRemoveError(err.message || "Failed to update role");
     }
   };
 
@@ -91,9 +92,10 @@ export default function MembersPanel() {
     try {
       await api.delete(`/v1/workspaces/${wsId}/members/${removeTarget.userId}`);
       setRemoveTarget(null);
+      setRemoveError("");
       fetchMembers();
     } catch (err: any) {
-      alert(err.message);
+      setRemoveError(err.message || "Failed to remove member");
     }
   };
 
@@ -245,8 +247,27 @@ export default function MembersPanel() {
         message={removeTarget ? `Remove ${removeTarget.name} from workspace?` : ""}
         variant="danger"
         onConfirm={handleRemoveConfirmed}
-        onCancel={() => setRemoveTarget(null)}
+        onCancel={() => { setRemoveTarget(null); setRemoveError(""); }}
       />
+
+      {/* Inline error toast for remove/role errors */}
+      {removeError && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-xl text-sm font-medium"
+          style={{ background: "rgba(239,68,68,0.95)", color: "#fff", minWidth: 320, maxWidth: 480 }}
+        >
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="flex-shrink-0">
+            <circle cx="9" cy="9" r="8" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M9 5.5V9.5M9 12V12.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+          </svg>
+          <span className="flex-1">{removeError}</span>
+          <button onClick={() => setRemoveError("")} className="opacity-70 hover:opacity-100 ml-2">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M3 3L11 11M3 11L11 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,12 +10,12 @@ import httpx
 from typing import Any, AsyncGenerator
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession # là một session xử lý bất đồng bộ
 
-from app.services.retrieval import retrieve
-from app.services.encryption import decrypt_key
-from app.services.observability import log_step_start, log_step_end, complete_run
-from app.models.run import Run
+from app.services.retrieval import retrieve #để thực hiện tính toán vector embedding và thực hiện câu lệnh tìm kiếm tương đồng 
+from app.services.encryption import decrypt_key 
+from app.services.observability import log_step_start, log_step_end, complete_run # ghi nhật ký và hoàn thành run
+from app.models.run import Run # để đại diện cho một lần thực thi workflow
 
 
 async def run_workflow(
@@ -178,20 +178,24 @@ async def _execute_node(
         pass
 
     elif node_type == "retrieve":
+        # Lấy danh sách dataset_id và số lượng chunk cần lấy (top_k) từ cấu hình của Node
         dataset_ids_raw = node_data.get("dataset_ids", [])
         top_k = node_data.get("top_k", 5)
         if dataset_ids_raw:
+             # Chuyển đổi định dạng ID từ string sang UUID để truy vấn database
             dataset_ids = [UUID(d) if isinstance(d, str) else d for d in dataset_ids_raw]
+            # Thực hiện retrieve dữ liệu từ pgvector
             chunks = await retrieve(db=db, query=state["query"], dataset_ids=dataset_ids, top_k=top_k)
+            # Lưu kết quả vào state
             state["retrieved_chunks"] = chunks
-            state["citations"] = chunks
+            state["citations"] = chunks # Lưu nguồn trích dẫn hiển thị ra màn hình chat
 
     elif node_type == "compose_prompt":
         template = node_data.get("template", "{{query}}")
         context_parts = []
-        for i, chunk in enumerate(state["retrieved_chunks"]):
+        for i, chunk in enumerate(state["retrieved_chunks"]): # Duyệt qua các chunk đã retrieve
             context_parts.append(f"[#{i}] {chunk['content']}")
-        context = "\n\n".join(context_parts) if context_parts else ""
+        context = "\n\n".join(context_parts) if context_parts else "" # Ghép các chunk thành context
 
         # Resolve system_prompt: App-level takes priority over node-level
         resolved_system_prompt = state.get("app_system_prompt") or node_data.get("system_prompt", "")

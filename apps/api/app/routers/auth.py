@@ -13,7 +13,7 @@ from app.models.user_workspace import UserWorkspace
 
 router = APIRouter(prefix="/v1/auth", tags=["auth"])
 
-
+#Đăng nhập/đăng xuất Admin, cấp JWT access token + refresh token, verify token
 # -- Schemas --
 class LoginRequest(BaseModel):
     email: str

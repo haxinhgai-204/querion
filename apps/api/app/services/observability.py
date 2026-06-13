@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.run import Run, RunStep
 
 
-async def create_run(
+async def create_run( # Hàm này nhận vào app_id, workflow_id, conversation_id và tạo ra một run
     db: AsyncSession,
     *,
     app_id: uuid.UUID | None = None,
@@ -28,7 +28,7 @@ async def create_run(
     return run
 
 
-async def log_step_start(
+async def log_step_start( # Hàm này nhận vào uuid của run, id và type của node, input của node
     db: AsyncSession,
     *,
     run_id: uuid.UUID,
@@ -49,7 +49,7 @@ async def log_step_start(
     return step
 
 
-async def log_step_end(
+async def log_step_end( # Hàm này nhận vào step của node, output của node
     step: RunStep,
     *,
     output_data: dict | None = None,
